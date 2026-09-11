@@ -2,9 +2,12 @@ import {
   commandError,
   type CommandResult,
   type DomainCommand,
+  type IssuePatch,
 } from './commands'
+import { CommandSystem } from './command-system'
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
+import { cloneIssue, normalizeIssue } from './issue-model'
 import { MemoryPersistence, type Persistence } from './persist'
 import { createWorkspaceSnapshot } from './seed-roadmap'
 import { IDS } from './seed'
@@ -17,6 +20,8 @@ import type {
   IssueFilters,
   Label,
   Layout,
+  Milestone,
+  OverlayId,
   Priority,
   Project,
   ProjectUpdate,
@@ -52,6 +57,8 @@ function defaultUi(snapshot: Snapshot): UiState {
     commandQuery: '',
     propertyMenu: null,
     collapsedStateIds: [],
+    selectionAnchorId: null,
+    modalStack: [],
     composer: {
       title: '',
       description: '',
@@ -60,7 +67,10 @@ function defaultUi(snapshot: Snapshot): UiState {
       assigneeId: null,
       priority: 0,
       projectId: null,
+      milestoneId: null,
       cycleId: currentCycle(snapshot.cycles)?.id ?? null,
+      parentId: null,
+      labelIds: [],
     },
   }
 }
@@ -84,9 +94,11 @@ export class NockStore {
   labels = new Map<string, Label>()
   projects = new Map<string, Project>()
   cycles = new Map<string, Cycle>()
+  milestones = new Map<string, Milestone>()
   issues = new Map<string, Issue>()
   projectUpdates = new Map<string, ProjectUpdate>()
   ui!: UiState
+  commands: CommandSystem
 
   persistError: string | null = null
   private listeners = new Set<() => void>()
@@ -95,6 +107,7 @@ export class NockStore {
 
   constructor(persist: Persistence) {
     this.persist = persist
+    this.commands = new CommandSystem(this)
   }
 
   static from(
@@ -129,6 +142,19 @@ export class NockStore {
     for (const listener of this.listeners) listener()
   }
 
+  bump(): void {
+    this.emit()
+  }
+
+  pushModal(id: OverlayId): void {
+    this.ui.modalStack = this.ui.modalStack.filter((item) => item !== id)
+    this.ui.modalStack.push(id)
+  }
+
+  dropModal(id: OverlayId): void {
+    this.ui.modalStack = this.ui.modalStack.filter((item) => item !== id)
+  }
+
   hydrate(snapshot: Snapshot): void {
     this.lastSyncId = snapshot.lastSyncId
     this.currentUserId = snapshot.currentUserId
@@ -154,17 +180,18 @@ export class NockStore {
     this.cycles = new Map(
       snapshot.cycles.map((cycle) => [cycle.id, { ...cycle }]),
     )
+    this.milestones = new Map(
+      (snapshot.milestones ?? []).map((milestone) => [milestone.id, { ...milestone }]),
+    )
     this.issues = new Map(
-      snapshot.issues.map((issue) => [
-        issue.id,
-        { ...issue, labelIds: [...issue.labelIds] },
-      ]),
+      snapshot.issues.map((issue) => [issue.id, normalizeIssue(issue)]),
     )
     this.projectUpdates = new Map(
       (snapshot.projectUpdates ?? []).map((update) => [update.id, { ...update }]),
     )
     this.ui = defaultUi(snapshot)
     this.repairCounters()
+    this.commands?.undo.clear()
   }
 
   serialize(): Snapshot {
@@ -178,10 +205,10 @@ export class NockStore {
       labels: [...this.labels.values()].map((label) => ({ ...label })),
       projects: [...this.projects.values()].map((project) => ({ ...project })),
       cycles: [...this.cycles.values()].map((cycle) => ({ ...cycle })),
-      issues: [...this.issues.values()].map((issue) => ({
-        ...issue,
-        labelIds: [...issue.labelIds],
+      milestones: [...this.milestones.values()].map((milestone) => ({
+        ...milestone,
       })),
+      issues: [...this.issues.values()].map((issue) => cloneIssue(issue)),
       projectUpdates: [...this.projectUpdates.values()].map((update) => ({
         ...update,
       })),
@@ -360,16 +387,16 @@ export class NockStore {
   private forgetIssue(id: string): void {
     if (this.ui.highlightedIssueId === id) this.ui.highlightedIssueId = null
     this.ui.selectedIssueIds = this.ui.selectedIssueIds.filter((row) => row !== id)
+    if (this.ui.selectionAnchorId === id) this.ui.selectionAnchorId = null
     if (!this.ui.highlightedIssueId) this.ui.peekOpen = false
   }
 
   private putIssue(issue: Issue): Issue {
-    const next: Issue = {
+    const next = normalizeIssue({
       ...issue,
-      labelIds: [...issue.labelIds],
       syncId: this.nextSyncId(),
       updatedAt: Date.now(),
-    }
+    })
     this.issues.set(next.id, next)
     this.emit()
     this.queuePersist()
@@ -395,9 +422,15 @@ export class NockStore {
       stateId: input.stateId ?? this.defaultState(team.id).id,
       assigneeId: input.assigneeId === undefined ? null : input.assigneeId,
       projectId: input.projectId ?? null,
+      milestoneId: input.milestoneId ?? null,
       cycleId: input.cycleId ?? null,
       labelIds: input.labelIds ?? [],
-      parentId: null,
+      parentId: input.parentId ?? null,
+      subscriberIds: [this.currentUserId],
+      relatedIssueIds: [],
+      blockedByIds: [],
+      duplicateOfId: null,
+      archivedAt: null,
       sortOrder: number,
       createdAt: now,
       updatedAt: now,
@@ -405,25 +438,7 @@ export class NockStore {
     })
   }
 
-  updateIssue(
-    id: string,
-    patch: Partial<
-      Pick<
-        Issue,
-        | 'title'
-        | 'description'
-        | 'priority'
-        | 'stateId'
-        | 'assigneeId'
-        | 'projectId'
-        | 'cycleId'
-        | 'labelIds'
-        | 'sortOrder'
-        | 'parentId'
-        | 'teamId'
-      >
-    >,
-  ): Issue {
+  updateIssue(id: string, patch: IssuePatch): Issue {
     const current = this.issues.get(id)
     if (!current) throw new Error(`[nock] issue not found: ${id}`)
     const next: Issue = {
@@ -434,16 +449,40 @@ export class NockStore {
       number: current.number,
       identifier: current.identifier,
       labelIds: patch.labelIds ? [...patch.labelIds] : [...current.labelIds],
+      subscriberIds: patch.subscriberIds
+        ? [...patch.subscriberIds]
+        : [...current.subscriberIds],
+      relatedIssueIds: patch.relatedIssueIds
+        ? [...patch.relatedIssueIds]
+        : [...current.relatedIssueIds],
+      blockedByIds: patch.blockedByIds
+        ? [...patch.blockedByIds]
+        : [...current.blockedByIds],
     }
     if (patch.teamId && patch.teamId !== current.teamId) {
       const team = this.teams.get(patch.teamId)
       if (!team) throw new Error('[nock] team not found')
-      team.issueCounter += 1
       next.teamId = team.id
-      next.number = team.issueCounter
-      next.identifier = formatIdentifier(team.key, team.issueCounter)
+      if (typeof patch.number === 'number' && patch.identifier) {
+        next.number = patch.number
+        next.identifier = patch.identifier
+      } else {
+        team.issueCounter += 1
+        next.number = team.issueCounter
+        next.identifier = formatIdentifier(team.key, team.issueCounter)
+      }
     }
     return this.putIssue(next)
+  }
+
+  restoreIssue(issue: Issue): Issue {
+    const next = cloneIssue(issue)
+    this.issues.set(next.id, next)
+    const team = this.teams.get(next.teamId)
+    if (team) team.issueCounter = Math.max(team.issueCounter, next.number)
+    this.emit()
+    this.queuePersist()
+    return next
   }
 
   deleteIssue(id: string): void {
@@ -457,7 +496,7 @@ export class NockStore {
   applyRemoteIssue(issue: Issue): Issue {
     const current = this.issues.get(issue.id)
     if (current && current.syncId > issue.syncId) return current
-    this.issues.set(issue.id, { ...issue, labelIds: [...issue.labelIds] })
+    this.issues.set(issue.id, normalizeIssue(issue))
     if (issue.syncId > this.lastSyncId) this.lastSyncId = issue.syncId
     this.repairCounters()
     this.emit()
@@ -475,12 +514,14 @@ export class NockStore {
   clickIssue(id: string): void {
     this.ui.highlightedIssueId = id
     this.ui.selectedIssueIds = [id]
+    this.ui.selectionAnchorId = id
     this.ui.propertyMenu = null
     this.emit()
   }
 
   clearSelection(): void {
     this.ui.selectedIssueIds = []
+    this.ui.selectionAnchorId = null
     this.emit()
   }
 
@@ -492,6 +533,7 @@ export class NockStore {
     if (selected.has(target)) selected.delete(target)
     else selected.add(target)
     this.ui.selectedIssueIds = [...selected]
+    this.ui.selectionAnchorId = target
     this.emit()
   }
 
@@ -500,6 +542,8 @@ export class NockStore {
     this.ui.peekOpen = !this.ui.peekOpen
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
+    if (this.ui.peekOpen) this.pushModal('peek')
+    else this.dropModal('peek')
     this.emit()
   }
 
@@ -508,6 +552,9 @@ export class NockStore {
     this.ui.peekOpen = true
     this.ui.commandOpen = false
     this.ui.propertyMenu = null
+    this.dropModal('command')
+    this.dropModal('property')
+    this.pushModal('peek')
     this.emit()
   }
 
@@ -586,6 +633,10 @@ export class NockStore {
     this.ui.filterMenuOpen = !this.ui.filterMenuOpen
     this.ui.displayMenuOpen = false
     this.ui.helpOpen = false
+    this.dropModal('display')
+    this.dropModal('help')
+    if (this.ui.filterMenuOpen) this.pushModal('filter')
+    else this.dropModal('filter')
     this.emit()
   }
 
@@ -593,6 +644,10 @@ export class NockStore {
     this.ui.displayMenuOpen = !this.ui.displayMenuOpen
     this.ui.filterMenuOpen = false
     this.ui.helpOpen = false
+    this.dropModal('filter')
+    this.dropModal('help')
+    if (this.ui.displayMenuOpen) this.pushModal('display')
+    else this.dropModal('display')
     this.emit()
   }
 
@@ -600,6 +655,10 @@ export class NockStore {
     this.ui.helpOpen = !this.ui.helpOpen
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
+    this.dropModal('filter')
+    this.dropModal('display')
+    if (this.ui.helpOpen) this.pushModal('help')
+    else this.dropModal('help')
     this.emit()
   }
 
@@ -607,6 +666,9 @@ export class NockStore {
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
     this.ui.helpOpen = false
+    this.dropModal('filter')
+    this.dropModal('display')
+    this.dropModal('help')
     this.emit()
   }
 
@@ -618,7 +680,7 @@ export class NockStore {
     this.emit()
   }
 
-  openComposer(fromView?: ViewId): void {
+  openComposer(fromView?: ViewId, options?: { parentId?: string }): void {
     const team = this.defaultTeam()
     let stateId = this.defaultState(team.id).id
     if (fromView === 'inbox') {
@@ -637,6 +699,12 @@ export class NockStore {
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
     this.ui.helpOpen = false
+    this.dropModal('command')
+    this.dropModal('property')
+    this.dropModal('filter')
+    this.dropModal('display')
+    this.dropModal('help')
+    this.pushModal('composer')
     this.ui.composer = {
       title: '',
       description: '',
@@ -645,7 +713,10 @@ export class NockStore {
       assigneeId: null,
       priority: 0,
       projectId: null,
+      milestoneId: null,
       cycleId: currentCycle([...this.cycles.values()])?.id ?? null,
+      parentId: options?.parentId ?? null,
+      labelIds: [],
     }
     this.emit()
   }
@@ -668,13 +739,17 @@ export class NockStore {
         assigneeId: this.ui.composer.assigneeId,
         priority: this.ui.composer.priority,
         projectId: this.ui.composer.projectId,
+        milestoneId: this.ui.composer.milestoneId,
         cycleId: this.ui.composer.cycleId,
+        parentId: this.ui.composer.parentId,
+        labelIds: this.ui.composer.labelIds,
       },
     })
     if (!result.ok || !result.issueId) return null
     const issue = this.issues.get(result.issueId)
     if (!issue) return null
     this.ui.composerOpen = false
+    this.dropModal('composer')
     this.ui.highlightedIssueId = issue.id
     this.ui.peekOpen = true
     this.emit()
@@ -688,11 +763,17 @@ export class NockStore {
     this.ui.propertyMenu = null
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
+    this.dropModal('composer')
+    this.dropModal('property')
+    this.dropModal('filter')
+    this.dropModal('display')
+    this.pushModal('command')
     this.emit()
   }
 
   closeCommand(): void {
     this.ui.commandOpen = false
+    this.dropModal('command')
     this.emit()
   }
 
@@ -702,43 +783,15 @@ export class NockStore {
   }
 
   dismissOverlays(): void {
-    if (this.ui.helpOpen) {
-      this.ui.helpOpen = false
-      this.emit()
-      return
-    }
-    if (this.ui.displayMenuOpen) {
-      this.ui.displayMenuOpen = false
-      this.emit()
-      return
-    }
-    if (this.ui.filterMenuOpen) {
-      this.ui.filterMenuOpen = false
-      this.emit()
-      return
-    }
-    if (this.ui.propertyMenu) {
-      this.ui.propertyMenu = null
-      this.emit()
-      return
-    }
-    if (this.ui.commandOpen) {
-      this.ui.commandOpen = false
-      this.emit()
-      return
-    }
-    if (this.ui.composerOpen) {
-      this.ui.composerOpen = false
-      this.emit()
-      return
-    }
-    if (this.ui.peekOpen) {
-      this.ui.peekOpen = false
+    const top = this.ui.modalStack[this.ui.modalStack.length - 1]
+    if (top) {
+      this.closeOverlay(top)
       this.emit()
       return
     }
     if (this.ui.selectedIssueIds.length > 0) {
       this.ui.selectedIssueIds = []
+      this.ui.selectionAnchorId = null
       this.emit()
       return
     }
@@ -748,9 +801,26 @@ export class NockStore {
     }
   }
 
+  private closeOverlay(id: OverlayId): void {
+    if (id === 'help') this.ui.helpOpen = false
+    if (id === 'display') this.ui.displayMenuOpen = false
+    if (id === 'filter') this.ui.filterMenuOpen = false
+    if (id === 'property') this.ui.propertyMenu = null
+    if (id === 'command') this.ui.commandOpen = false
+    if (id === 'composer') this.ui.composerOpen = false
+    if (id === 'peek') this.ui.peekOpen = false
+    this.dropModal(id)
+  }
+
   openPropertyMenu(kind: PropertyMenuKind): void {
     if (this.actionIssueIds().length === 0 && !this.ui.composerOpen) return
-    this.ui.propertyMenu = this.ui.propertyMenu === kind ? null : kind
+    if (this.ui.propertyMenu === kind) {
+      this.ui.propertyMenu = null
+      this.dropModal('property')
+    } else {
+      this.ui.propertyMenu = kind
+      this.pushModal('property')
+    }
     this.emit()
   }
 
@@ -773,13 +843,40 @@ export class NockStore {
         this.setComposer({
           cycleId: normalized === null ? null : String(normalized),
         })
+      if (kind === 'milestone')
+        this.setComposer({
+          milestoneId: normalized === null ? null : String(normalized),
+        })
+      if (kind === 'label') {
+        const labelId = String(value)
+        const ids = new Set(this.ui.composer.labelIds)
+        if (ids.has(labelId)) ids.delete(labelId)
+        else ids.add(labelId)
+        this.setComposer({ labelIds: [...ids] })
+      }
       this.ui.propertyMenu = null
+      this.dropModal('property')
       this.emit()
       return
     }
     const ids = this.actionIssueIds()
     if (ids.length === 0) return
-    const patch =
+    if (kind === 'label') {
+      const labelId = String(value)
+      for (const issueId of ids) {
+        const issue = this.issues.get(issueId)
+        if (!issue) continue
+        const labelIds = issue.labelIds.includes(labelId)
+          ? issue.labelIds.filter((id) => id !== labelId)
+          : [...issue.labelIds, labelId]
+        this.updateIssue(issueId, { labelIds })
+      }
+      this.ui.propertyMenu = null
+      this.dropModal('property')
+      this.emit()
+      return
+    }
+    const patch: IssuePatch =
       kind === 'status'
         ? { stateId: String(value) }
         : kind === 'priority'
@@ -788,9 +885,14 @@ export class NockStore {
             ? { assigneeId: normalized === null ? null : String(normalized) }
             : kind === 'project'
               ? { projectId: normalized === null ? null : String(normalized) }
-              : { cycleId: normalized === null ? null : String(normalized) }
+              : kind === 'milestone'
+                ? { milestoneId: normalized === null ? null : String(normalized) }
+                : kind === 'team'
+                  ? { teamId: String(value) }
+                  : { cycleId: normalized === null ? null : String(normalized) }
     for (const issueId of ids) this.updateIssue(issueId, patch)
     this.ui.propertyMenu = null
+    this.dropModal('property')
     this.emit()
   }
 
@@ -865,8 +967,10 @@ export class NockStore {
 
   searchIssues(query: string): Issue[] {
     return [...this.issues.values()]
-      .filter((issue) =>
-        fuzzyMatch(query, `${issue.identifier} ${issue.title}`),
+      .filter(
+        (issue) =>
+          !issue.archivedAt &&
+          fuzzyMatch(query, `${issue.identifier} ${issue.title}`),
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 20)
@@ -884,7 +988,7 @@ export class NockStore {
 
   issuesForProject(projectId: string): Issue[] {
     return [...this.issues.values()]
-      .filter((issue) => issue.projectId === projectId)
+      .filter((issue) => issue.projectId === projectId && !issue.archivedAt)
       .sort((a, b) => a.sortOrder - b.sortOrder)
   }
 
@@ -894,7 +998,7 @@ export class NockStore {
     ratio: number
   } {
     const issues = [...this.issues.values()].filter(
-      (issue) => issue.projectId === projectId,
+      (issue) => issue.projectId === projectId && !issue.archivedAt,
     )
     const completed = issues.filter(
       (issue) => this.states.get(issue.stateId)?.type === 'completed',

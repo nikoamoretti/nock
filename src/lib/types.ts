@@ -127,6 +127,13 @@ export interface Cycle {
   syncId: number
 }
 
+export interface Milestone {
+  id: string
+  projectId: string
+  name: string
+  sortOrder: number
+}
+
 export interface Issue {
   id: string
   teamId: string
@@ -138,9 +145,15 @@ export interface Issue {
   stateId: string
   assigneeId: string | null
   projectId: string | null
+  milestoneId: string | null
   cycleId: string | null
   labelIds: string[]
   parentId: string | null
+  subscriberIds: string[]
+  relatedIssueIds: string[]
+  blockedByIds: string[]
+  duplicateOfId: string | null
+  archivedAt: number | null
   sortOrder: number
   createdAt: number
   updatedAt: number
@@ -157,6 +170,7 @@ export interface Snapshot {
   labels: Label[]
   projects: Project[]
   cycles: Cycle[]
+  milestones: Milestone[]
   issues: Issue[]
   projectUpdates: ProjectUpdate[]
 }
@@ -169,11 +183,21 @@ export interface CreateIssueInput {
   assigneeId?: string | null
   priority?: Priority
   projectId?: string | null
+  milestoneId?: string | null
   cycleId?: string | null
   labelIds?: string[]
+  parentId?: string | null
 }
 
-export type PropertyMenuKind = 'status' | 'priority' | 'assignee' | 'project' | 'cycle'
+export type PropertyMenuKind =
+  | 'status'
+  | 'priority'
+  | 'assignee'
+  | 'project'
+  | 'cycle'
+  | 'label'
+  | 'milestone'
+  | 'team'
 
 export interface UiState {
   highlightedIssueId: string | null
@@ -191,6 +215,8 @@ export interface UiState {
   commandQuery: string
   propertyMenu: PropertyMenuKind | null
   collapsedStateIds: string[]
+  selectionAnchorId: string | null
+  modalStack: OverlayId[]
   composer: {
     title: string
     description: string
@@ -199,9 +225,21 @@ export interface UiState {
     assigneeId: string | null
     priority: Priority
     projectId: string | null
+    milestoneId: string | null
     cycleId: string | null
+    parentId: string | null
+    labelIds: string[]
   }
 }
+
+export type OverlayId =
+  | 'help'
+  | 'display'
+  | 'filter'
+  | 'property'
+  | 'command'
+  | 'composer'
+  | 'peek'
 
 export const EMPTY_FILTERS: IssueFilters = {
   assigneeId: null,

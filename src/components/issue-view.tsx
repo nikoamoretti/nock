@@ -6,6 +6,7 @@ import { cn, formatShortDate } from '../lib/cn'
 import { filtersActive, groupIssues } from '../lib/filters'
 import type { DisplayProperty, Issue, ViewId } from '../lib/types'
 import { filtersFromSearch, searchFromFilters } from '../lib/url-filters'
+import { ContextMenu } from '../ui/overlays'
 import { BulkBar } from './bulk-bar'
 import { DisplayMenu } from './display-menu'
 import { FilterMenu } from './filter-menu'
@@ -73,16 +74,12 @@ export function IssueView({ view }: { view: ViewId }) {
                 <HeaderButton
                   label="Accept"
                   hint="1"
-                  onClick={() =>
-                    store.execute({ type: 'issue.acceptTriage', view: 'inbox' })
-                  }
+                  onClick={() => store.commands.run('issue.acceptTriage')}
                 />
                 <HeaderButton
                   label="Decline"
                   hint="3"
-                  onClick={() =>
-                    store.execute({ type: 'issue.declineTriage', view: 'inbox' })
-                  }
+                  onClick={() => store.commands.run('issue.declineTriage')}
                 />
               </>
             )}
@@ -90,13 +87,13 @@ export function IssueView({ view }: { view: ViewId }) {
               label="Filter"
               hint="F"
               active={filterOn || store.ui.filterMenuOpen}
-              onClick={() => store.toggleFilterMenu()}
+              onClick={() => store.commands.run('view.openFilters')}
             />
             <HeaderButton
               label="Display"
               hint="⇧V"
               active={store.ui.displayMenuOpen}
-              onClick={() => store.toggleDisplayMenu()}
+              onClick={() => store.commands.run('view.openDisplayOptions')}
             />
             {view !== 'inbox' && (
               <>
@@ -104,13 +101,8 @@ export function IssueView({ view }: { view: ViewId }) {
                   active={layout === 'list'}
                   label="List"
                   onClick={() => {
-                    store.setLayout('list')
-                    if (view === 'board') {
-                      navigate({
-                        pathname: '/eng/all',
-                        search: storeSearch,
-                      })
-                    }
+                    if (layout === 'board') store.commands.run('view.toggleLayout')
+                    else store.setLayout('list')
                   }}
                 />
                 <ViewSwitch
@@ -123,7 +115,7 @@ export function IssueView({ view }: { view: ViewId }) {
             <button
               type="button"
               className="ml-2 rounded-md bg-accent px-2 py-1 text-[12px] font-medium text-white"
-              onClick={() => store.openComposer(view)}
+              onClick={() => store.commands.run('issue.create')}
             >
               New issue
             </button>
@@ -244,16 +236,78 @@ export function IssueRow({ issue }: { issue: Issue }) {
   const selected = store.ui.selectedIssueIds.includes(issue.id)
   const show = (property: DisplayProperty) =>
     store.ui.displayProperties.includes(property)
+  const subscribed = issue.subscriberIds.includes(store.currentUserId)
 
   return (
+    <div className="w-full">
+    <ContextMenu
+      items={[
+        {
+          id: 'open',
+          label: 'Open',
+          onSelect: () => store.commands.run('issue.open', { id: issue.id }),
+        },
+        {
+          id: 'status',
+          label: 'Set status',
+          onSelect: () => store.commands.run('issue.setStatus'),
+        },
+        {
+          id: 'priority',
+          label: 'Set priority',
+          onSelect: () => store.commands.run('issue.setPriority'),
+        },
+        {
+          id: 'assignee',
+          label: 'Set assignee',
+          onSelect: () => store.commands.run('issue.setAssignee'),
+        },
+        {
+          id: 'label',
+          label: 'Add label',
+          onSelect: () => store.commands.run('issue.addLabel'),
+        },
+        {
+          id: 'project',
+          label: 'Set project',
+          onSelect: () => store.commands.run('issue.setProject'),
+        },
+        {
+          id: 'subscribe',
+          label: subscribed ? 'Unsubscribe' : 'Subscribe',
+          onSelect: () =>
+            store.commands.run(subscribed ? 'issue.unsubscribe' : 'issue.subscribe'),
+        },
+        {
+          id: 'archive',
+          label: 'Archive',
+          disabled: !store.commands.canRun('issue.archive'),
+          onSelect: () => store.commands.run('issue.archive'),
+        },
+        {
+          id: 'delete',
+          label: 'Delete',
+          onSelect: () => store.commands.run('issue.delete'),
+        },
+      ]}
+    >
     <button
       type="button"
+      onContextMenu={() => {
+        if (!store.ui.selectedIssueIds.includes(issue.id)) {
+          store.commands.run('selection.toggle', { id: issue.id, exclusive: true })
+        }
+      }}
       onClick={(event) => {
-        if (event.metaKey || event.ctrlKey) {
-          store.toggleSelect(issue.id)
+        if (event.shiftKey) {
+          store.commands.run('selection.range', { id: issue.id })
           return
         }
-        store.clickIssue(issue.id)
+        if (event.metaKey || event.ctrlKey) {
+          store.commands.run('selection.toggle', { id: issue.id })
+          return
+        }
+        store.commands.run('selection.toggle', { id: issue.id, exclusive: true })
       }}
       onKeyDown={(event) => {
         if (event.key === ' ' || event.code === 'Space') event.preventDefault()
@@ -304,6 +358,8 @@ export function IssueRow({ issue }: { issue: Issue }) {
         (assignee ? <Avatar user={assignee} /> : <span className="w-[18px]" />)}
       {show('status') && state && <StatusIcon state={state} />}
     </button>
+    </ContextMenu>
+    </div>
   )
 }
 
@@ -322,12 +378,13 @@ function Board({ issues }: { issues: Issue[] }) {
             onDrop={(event) => {
               event.preventDefault()
               const id = event.dataTransfer.getData('text/nock-issue')
-              if (id)
-                store.execute({
-                  type: 'issue.moveToState',
-                  id,
-                  stateId: state.id,
-                })
+              if (!id) return
+              const issueIds =
+                store.ui.selectedIssueIds.includes(id) &&
+                store.ui.selectedIssueIds.length > 0
+                  ? store.ui.selectedIssueIds
+                  : [id]
+              store.commands.run('issue.setStatus', { stateId: state.id, issueIds })
             }}
           >
             <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-mute">
@@ -359,7 +416,9 @@ function BoardCard({ issue }: { issue: Issue }) {
       onDragStart={(event) => {
         event.dataTransfer.setData('text/nock-issue', issue.id)
       }}
-      onClick={() => store.clickIssue(issue.id)}
+      onClick={() =>
+        store.commands.run('selection.toggle', { id: issue.id, exclusive: true })
+      }
       onKeyDown={(event) => {
         if (event.key === ' ' || event.code === 'Space') event.preventDefault()
       }}
@@ -409,18 +468,14 @@ export function IssuePeek() {
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
-                onClick={() =>
-                  store.execute({ type: 'issue.acceptTriage', view: 'inbox' })
-                }
+                onClick={() => store.commands.run('issue.acceptTriage')}
               >
                 Accept
               </button>
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
-                onClick={() =>
-                  store.execute({ type: 'issue.declineTriage', view: 'inbox' })
-                }
+                onClick={() => store.commands.run('issue.declineTriage')}
               >
                 Decline
               </button>
@@ -463,14 +518,14 @@ export function IssuePeek() {
         <dl className="mt-6 space-y-2 text-[13px]">
           <PeekRow
             label="Status"
-            onClick={() => store.openPropertyMenu('status')}
+            onClick={() => store.commands.run('issue.setStatus')}
           >
             {state && <StatusIcon state={state} />}
             {state?.name}
           </PeekRow>
           <PeekRow
             label="Assignee"
-            onClick={() => store.openPropertyMenu('assignee')}
+            onClick={() => store.commands.run('issue.setAssignee')}
           >
             {assignee ? (
               <>
@@ -482,21 +537,37 @@ export function IssuePeek() {
           </PeekRow>
           <PeekRow
             label="Priority"
-            onClick={() => store.openPropertyMenu('priority')}
+            onClick={() => store.commands.run('issue.setPriority')}
           >
             <PriorityIcon priority={issue.priority} />
           </PeekRow>
           <PeekRow
             label="Project"
-            onClick={() => store.openPropertyMenu('project')}
+            onClick={() => store.commands.run('issue.setProject')}
           >
             {project?.name ?? <span className="text-dim">None</span>}
           </PeekRow>
           <PeekRow
             label="Cycle"
-            onClick={() => store.openPropertyMenu('cycle')}
+            onClick={() => store.commands.run('issue.setCycle')}
           >
             {cycle ? `Cycle ${cycle.number}` : <span className="text-dim">None</span>}
+          </PeekRow>
+          <PeekRow
+            label="Labels"
+            onClick={() => store.commands.run('issue.addLabel')}
+          >
+            {issue.labelIds.length
+              ? `${issue.labelIds.length}`
+              : <span className="text-dim">None</span>}
+          </PeekRow>
+          <PeekRow
+            label="Milestone"
+            onClick={() => store.commands.run('issue.setMilestone')}
+          >
+            {issue.milestoneId
+              ? (store.milestones.get(issue.milestoneId)?.name ?? 'Milestone')
+              : <span className="text-dim">None</span>}
           </PeekRow>
           <div className="flex items-center justify-between py-1 text-mute">
             <dt>Created</dt>

@@ -1,22 +1,9 @@
-const SHORTCUTS: Array<{ keys: string; action: string }> = [
-  { keys: 'C', action: 'New issue' },
-  { keys: '⌘K', action: 'Command menu' },
-  { keys: 'J / K', action: 'Highlight next / previous' },
-  { keys: 'X', action: 'Select highlighted issue' },
-  { keys: 'Space', action: 'Peek highlighted issue' },
-  { keys: 'Esc', action: 'Close overlay, then selection' },
-  { keys: 'F', action: 'Filters' },
-  { keys: 'Shift+V', action: 'Display options' },
-  { keys: '⌘B', action: 'Toggle list / board' },
-  { keys: 'P / T / A', action: 'Priority / status / assignee' },
-  { keys: '[ / ]', action: 'Move board card to previous / next column' },
-  { keys: 'T', action: 'Set status (keyboard equivalent of board drag)' },
-  { keys: '1 / 3', action: 'Triage accept / decline' },
-  { keys: 'G then I T M A B P C', action: 'Go to a view' },
-  { keys: '? or ⌘/', action: 'This overlay' },
-]
+import { useNock } from '../hooks/use-nock'
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
+  const store = useNock()
+  const rows = store.commands.helpRows()
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[12vh]"
@@ -37,9 +24,9 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="max-h-[60vh] overflow-auto py-2">
-          {SHORTCUTS.map((row) => (
+          {rows.map((row) => (
             <div
-              key={row.keys}
+              key={`${row.action}-${row.keys}`}
               className="flex items-center justify-between gap-4 px-4 py-1.5 text-[13px]"
             >
               <span className="text-ink">{row.action}</span>

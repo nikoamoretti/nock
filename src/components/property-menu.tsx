@@ -42,7 +42,7 @@ export function PropertyMenu() {
   const options = optionsFor(store, kind)
 
   return (
-    <div className="fixed inset-0 z-40" onMouseDown={() => store.dismissOverlays()}>
+    <div className="fixed inset-0 z-40" onMouseDown={() => store.commands.run('surface.dismiss')}>
       <div
         className="nock-overlay absolute left-1/2 top-[18%] w-[320px] -translate-x-1/2 overflow-hidden rounded-lg border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
@@ -53,6 +53,9 @@ export function PropertyMenu() {
           {kind === 'assignee' && 'Assign'}
           {kind === 'project' && 'Project'}
           {kind === 'cycle' && 'Cycle'}
+          {kind === 'label' && 'Labels'}
+          {kind === 'milestone' && 'Milestone'}
+          {kind === 'team' && 'Team'}
         </div>
         <div className="max-h-[320px] overflow-auto p-1">
           {options.map((option) => (
@@ -63,13 +66,7 @@ export function PropertyMenu() {
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-hover',
                 option.active && 'bg-hover text-ink',
               )}
-              onClick={() =>
-                store.execute({
-                  type: 'issue.setProperty',
-                  kind,
-                  value: option.value,
-                })
-              }
+              onClick={() => runProperty(store, kind, option.value)}
             >
               {option.icon}
               <span>{option.label}</span>
@@ -143,18 +140,88 @@ function optionsFor(
       })),
     ]
   }
-  return [
-    {
-      value: null,
-      label: 'No cycle',
-      icon: <span className="w-3.5" />,
-      active: current.cycleId === null,
-    },
-    ...[...store.cycles.values()].map((cycle) => ({
-      value: cycle.id,
-      label: `Cycle ${cycle.number}`,
-      icon: <span className="text-[11px] text-mute">C{cycle.number}</span>,
-      active: current.cycleId === cycle.id,
-    })),
-  ]
+  if (kind === 'cycle') {
+    return [
+      {
+        value: null,
+        label: 'No cycle',
+        icon: <span className="w-3.5" />,
+        active: current.cycleId === null,
+      },
+      ...[...store.cycles.values()].map((cycle) => ({
+        value: cycle.id,
+        label: `Cycle ${cycle.number}`,
+        icon: <span className="text-[11px] text-mute">C{cycle.number}</span>,
+        active: current.cycleId === cycle.id,
+      })),
+    ]
+  }
+  if (kind === 'label') {
+    const selected = new Set(
+      store.ui.composerOpen
+        ? store.ui.composer.labelIds
+        : (store.actionIssue()?.labelIds ?? []),
+    )
+    return [...store.labels.values()].map((label) => ({
+      value: label.id,
+      label: label.name,
+      icon: (
+        <span
+          className="h-2.5 w-2.5 rounded-sm"
+          style={{ background: label.color }}
+        />
+      ),
+      active: selected.has(label.id),
+    }))
+  }
+  if (kind === 'milestone') {
+    return [
+      {
+        value: null,
+        label: 'No milestone',
+        icon: <span className="w-3.5" />,
+        active: ('milestoneId' in current ? current.milestoneId : null) === null,
+      },
+      ...[...store.milestones.values()].map((milestone) => ({
+        value: milestone.id,
+        label: milestone.name,
+        icon: <span className="h-2 w-2 rounded-sm bg-accent" />,
+        active: 'milestoneId' in current && current.milestoneId === milestone.id,
+      })),
+    ]
+  }
+  return [...store.teams.values()].map((team) => ({
+    value: team.id,
+    label: team.name,
+    icon: <span className="text-[11px] text-mute">{team.key}</span>,
+    active: store.ui.composerOpen
+      ? store.ui.composer.teamId === team.id
+      : store.actionIssue()?.teamId === team.id,
+  }))
+}
+
+function runProperty(
+  store: ReturnType<typeof useNock>,
+  kind: NonNullable<typeof store.ui.propertyMenu>,
+  value: string | number | null,
+): void {
+  if (kind === 'status') store.commands.run('issue.setStatus', { stateId: String(value) })
+  else if (kind === 'priority') store.commands.run('issue.setPriority', { priority: value })
+  else if (kind === 'assignee') store.commands.run('issue.setAssignee', { assigneeId: value })
+  else if (kind === 'project') store.commands.run('issue.setProject', { projectId: value })
+  else if (kind === 'cycle') store.commands.run('issue.setCycle', { cycleId: value })
+  else if (kind === 'milestone') {
+    store.commands.run('issue.setMilestone', { milestoneId: value })
+  } else if (kind === 'team') {
+    store.commands.run('issue.moveTeam', { teamId: String(value) })
+  } else if (kind === 'label') {
+    const labelId = String(value)
+    const ids = store.ui.composerOpen
+      ? store.ui.composer.labelIds
+      : (store.actionIssue()?.labelIds ?? [])
+    store.commands.run(
+      ids.includes(labelId) ? 'issue.removeLabel' : 'issue.addLabel',
+      { labelId },
+    )
+  }
 }

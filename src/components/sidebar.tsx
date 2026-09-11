@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
+import { formatShortcut } from '../lib/command-system'
 import { isDesktopApp } from '../lib/desktop'
 import { searchFromFilters } from '../lib/url-filters'
 import { NockMark } from './icons'
@@ -36,11 +37,13 @@ export function Sidebar() {
       </div>
       <button
         type="button"
-        onClick={() => store.openCommand()}
+        onClick={() => store.commands.run('command.palette')}
         className="mx-2 mb-2 flex items-center justify-between rounded-md border border-line bg-fill px-2 py-1.5 text-[12px] text-mute hover:bg-hover"
       >
         Search
-        <span className="rounded border border-line px-1 text-[10px]">⌘K</span>
+        <span className="rounded border border-line px-1 text-[10px]">
+          {formatShortcut({ key: 'k', mod: true })}
+        </span>
       </button>
       <nav className="flex flex-1 flex-col gap-0.5 px-2">
         <SideLink to="/inbox" label="Inbox" count={inboxCount} />

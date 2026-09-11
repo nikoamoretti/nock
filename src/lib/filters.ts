@@ -51,6 +51,7 @@ export function filterIssues(
   const { issues, states, currentUserId } = snapshot
   return issues
     .filter((issue) => {
+      if (issue.archivedAt) return false
       const state = stateById(states, issue.stateId)
       if (!state) return false
       switch (view) {

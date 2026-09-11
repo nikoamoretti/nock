@@ -1,3 +1,4 @@
+import { normalizeIssue } from './issue-model'
 import type {
   Cycle,
   Issue,
@@ -23,12 +24,14 @@ export const IDS = {
   stateReview: 'state_review',
   stateDone: 'state_done',
   stateCanceled: 'state_canceled',
+  stateDuplicate: 'state_duplicate',
   labelBug: 'label_bug',
   labelFeature: 'label_feature',
   labelImprove: 'label_improve',
   projectSync: 'proj_sync',
   projectCommand: 'proj_command',
   cycleCurrent: 'cycle_current',
+  milestoneLaunch: 'ms_launch',
 } as const
 
 function at(daysFromNow: number, now: number): number {
@@ -132,6 +135,15 @@ export function createBootstrapSnapshot(options?: {
       position: 6,
       isDefault: false,
     },
+    {
+      id: IDS.stateDuplicate,
+      teamId: IDS.teamEng,
+      name: 'Duplicate',
+      type: 'duplicate',
+      color: '#95a2b3',
+      position: 7,
+      isDefault: false,
+    },
   ]
   const labels: Label[] = [
     {
@@ -202,6 +214,14 @@ export function createBootstrapSnapshot(options?: {
     labels,
     projects,
     cycles,
+    milestones: [
+      {
+        id: IDS.milestoneLaunch,
+        projectId: IDS.projectSync,
+        name: 'Launch',
+        sortOrder: 1,
+      },
+    ],
     issues: [],
     projectUpdates: [],
   }
@@ -334,7 +354,7 @@ function demoIssues(now: number): Issue[] {
 
   return rows.map((row, index) => {
     const number = index + 1
-    return {
+    return normalizeIssue({
       id: `issue_${number}`,
       teamId: IDS.teamEng,
       number,
@@ -352,6 +372,12 @@ function demoIssues(now: number): Issue[] {
       createdAt: now - (rows.length - index) * 3600000,
       updatedAt: now - index * 60000,
       syncId: 3 + number,
-    }
+      milestoneId: null,
+      subscriberIds: [],
+      relatedIssueIds: [],
+      blockedByIds: [],
+      duplicateOfId: null,
+      archivedAt: null,
+    })
   })
 }

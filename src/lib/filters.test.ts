@@ -17,6 +17,12 @@ function issue(
     cycleId: null,
     labelIds: [],
     parentId: null,
+    milestoneId: null,
+    subscriberIds: [],
+    relatedIssueIds: [],
+    blockedByIds: [],
+    duplicateOfId: null,
+    archivedAt: null,
     sortOrder: 0,
     createdAt: 1,
     updatedAt: 1,
@@ -151,6 +157,26 @@ describe('filters', () => {
       }),
     ]
     expect(filterIssues(snapshot, 'all').map((row) => row.id)).toEqual(['todo'])
+  })
+
+  it('archived issues are hidden from views', () => {
+    const snapshot = createBootstrapSnapshot({ demo: false })
+    snapshot.issues = [
+      issue({
+        id: 'open',
+        title: 'Open',
+        stateId: IDS.stateTodo,
+      }),
+      issue({
+        id: 'archived',
+        title: 'Archived',
+        stateId: IDS.stateTodo,
+        identifier: 'ENG-2',
+        number: 2,
+        archivedAt: 9,
+      }),
+    ]
+    expect(filterIssues(snapshot, 'all').map((row) => row.id)).toEqual(['open'])
   })
 
   it('extra filters narrow a view', () => {

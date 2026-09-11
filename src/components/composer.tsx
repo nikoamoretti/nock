@@ -21,7 +21,7 @@ export function Composer() {
   return (
     <div
       className="fixed inset-0 z-30 flex items-start justify-center bg-black/50 pt-[12vh]"
-      onMouseDown={() => store.dismissOverlays()}
+      onMouseDown={() => store.commands.run('surface.dismiss')}
     >
       <form
         className="nock-overlay w-[640px] overflow-hidden rounded-xl border border-line bg-lift"
@@ -38,7 +38,11 @@ export function Composer() {
         }}
       >
         <div className="border-b border-line px-4 py-3">
-          <div className="text-[12px] text-mute">New issue</div>
+          <div className="text-[12px] text-mute">
+            {draft.parentId
+              ? `Sub-issue of ${store.issue(draft.parentId)?.identifier ?? 'issue'}`
+              : 'New issue'}
+          </div>
           <input
             ref={titleRef}
             value={draft.title}
@@ -60,35 +64,41 @@ export function Composer() {
           <div className="flex flex-wrap items-center gap-0.5">
             <PropertyButton
               title="Status"
-              onClick={() => store.openPropertyMenu('status')}
+              onClick={() => store.commands.run('issue.setStatus')}
             >
               {state && <StatusIcon state={state} />}
               {state?.name}
             </PropertyButton>
             <PropertyButton
               title="Assignee"
-              onClick={() => store.openPropertyMenu('assignee')}
+              onClick={() => store.commands.run('issue.setAssignee')}
             >
               {assignee ? <Avatar user={assignee} /> : <span className="text-dim">Assignee</span>}
               {assignee?.name}
             </PropertyButton>
             <PropertyButton
               title="Priority"
-              onClick={() => store.openPropertyMenu('priority')}
+              onClick={() => store.commands.run('issue.setPriority')}
             >
               <PriorityIcon priority={draft.priority} />
             </PropertyButton>
             <PropertyButton
               title="Project"
-              onClick={() => store.openPropertyMenu('project')}
+              onClick={() => store.commands.run('issue.setProject')}
             >
               {project?.name ?? 'Project'}
             </PropertyButton>
             <PropertyButton
               title="Cycle"
-              onClick={() => store.openPropertyMenu('cycle')}
+              onClick={() => store.commands.run('issue.setCycle')}
             >
               {cycle ? `Cycle ${cycle.number}` : 'Cycle'}
+            </PropertyButton>
+            <PropertyButton
+              title="Labels"
+              onClick={() => store.commands.run('issue.addLabel')}
+            >
+              {draft.labelIds.length ? `${draft.labelIds.length} labels` : 'Labels'}
             </PropertyButton>
           </div>
           <button

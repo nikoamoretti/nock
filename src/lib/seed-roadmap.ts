@@ -689,11 +689,27 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
       createdAt,
       updatedAt: createdAt,
       syncId: syncId++,
+      milestoneId: null,
+      subscriberIds: [IDS.userMe],
+      relatedIssueIds: [],
+      blockedByIds: [],
+      duplicateOfId: null,
+      archivedAt: null,
     }
   })
 
   snapshot.issues = issues
   snapshot.projectUpdates = updates
+  snapshot.milestones = snapshot.projects[0]
+    ? [
+        {
+          id: 'ms_launch',
+          projectId: snapshot.projects[0].id,
+          name: 'Launch',
+          sortOrder: 1,
+        },
+      ]
+    : []
   snapshot.teams[0] = {
     ...snapshot.teams[0],
     name: 'Workspace',

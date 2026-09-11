@@ -7,11 +7,19 @@ export type IssuePatch = Partial<{
   stateId: string
   assigneeId: string | null
   projectId: string | null
+  milestoneId: string | null
   cycleId: string | null
   labelIds: string[]
   sortOrder: number
   parentId: string | null
   teamId: string
+  number: number
+  identifier: string
+  subscriberIds: string[]
+  relatedIssueIds: string[]
+  blockedByIds: string[]
+  duplicateOfId: string | null
+  archivedAt: number | null
 }>
 
 export type DomainCommand =
