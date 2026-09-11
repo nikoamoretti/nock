@@ -99,7 +99,7 @@ export class NockStore {
 
   static async open(persist: Persistence): Promise<NockStore> {
     const loaded = await persist.load()
-    const snapshot = loaded ?? createBootstrapSnapshot({ demo: true })
+    const snapshot = loaded ?? createBootstrapSnapshot({ demo: false })
     const store = NockStore.from(snapshot, persist)
     if (!loaded) {
       store.queuePersist()
@@ -808,7 +808,7 @@ export class NockStore {
   }
 
   async resetDemo(): Promise<void> {
-    this.hydrate(createBootstrapSnapshot({ demo: true }))
+    this.hydrate(createBootstrapSnapshot({ demo: false }))
     this.emit()
     this.queuePersist()
     await this.flush()

@@ -22,17 +22,20 @@ export class MemoryPersistence implements Persistence {
 }
 
 const DB_NAME = 'nock'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE = 'kv'
 const KEY = 'snapshot'
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE)
+      }
+      if (event.oldVersion < 2) {
+        request.transaction?.objectStore(STORE).delete(KEY)
       }
     }
     request.onsuccess = () => resolve(request.result)
