@@ -12,7 +12,7 @@ const COMMANDS = [
   { id: 'board', label: 'Toggle board layout', hint: '⌘B', path: '/eng/board' },
   { id: 'projects', label: 'Go to Projects', hint: 'G P', path: '/projects' },
   { id: 'cycles', label: 'Go to Cycles', hint: 'G C', path: '/cycles' },
-  { id: 'reset', label: 'Clear all issues', hint: '', path: null },
+  { id: 'reset', label: 'Reload project map', hint: '', path: null },
 ] as const
 
 export function CommandMenu() {

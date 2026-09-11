@@ -6,11 +6,11 @@ import { searchFromFilters } from '../lib/url-filters'
 import { NockMark } from './icons'
 
 const TEAM_LINKS = [
+  { to: '/projects', label: 'Projects' },
   { to: '/eng/all', label: 'All issues' },
   { to: '/eng/active', label: 'Active' },
   { to: '/eng/backlog', label: 'Backlog' },
   { to: '/eng/board', label: 'Board' },
-  { to: '/projects', label: 'Projects' },
   { to: '/cycles', label: 'Cycles' },
 ]
 
@@ -46,7 +46,7 @@ export function Sidebar() {
         <SideLink to="/inbox" label="Inbox" count={inboxCount} />
         <SideLink to="/my-issues" label="My issues" count={mineCount} />
         <div className="mt-4 px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-dim">
-          Engineering
+          Workspace
         </div>
         {TEAM_LINKS.map((link) => (
           <SideLink key={link.to} to={link.to} label={link.label} />

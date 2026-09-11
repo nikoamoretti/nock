@@ -11,6 +11,8 @@ export type Priority = 0 | 1 | 2 | 3 | 4
 
 export type ProjectStatus = 'planned' | 'started' | 'completed' | 'canceled'
 
+export type ProjectHealth = 'on-track' | 'at-risk' | 'off-track' | 'no-update'
+
 export type ViewId =
   | 'inbox'
   | 'my-issues'
@@ -97,8 +99,20 @@ export interface Project {
   name: string
   description: string
   status: ProjectStatus
+  area: string
+  health: ProjectHealth
   createdAt: number
   updatedAt: number
+  syncId: number
+}
+
+export interface ProjectUpdate {
+  id: string
+  projectId: string
+  authorId: string
+  health: ProjectHealth
+  body: string
+  createdAt: number
   syncId: number
 }
 
@@ -144,6 +158,7 @@ export interface Snapshot {
   projects: Project[]
   cycles: Cycle[]
   issues: Issue[]
+  projectUpdates: ProjectUpdate[]
 }
 
 export interface CreateIssueInput {
@@ -212,6 +227,13 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   2: 'High',
   3: 'Medium',
   4: 'Low',
+}
+
+export const HEALTH_LABELS: Record<ProjectHealth, string> = {
+  'on-track': 'On track',
+  'at-risk': 'At risk',
+  'off-track': 'Off track',
+  'no-update': 'No update',
 }
 
 export const PRIORITY_RANK: Record<Priority, number> = {

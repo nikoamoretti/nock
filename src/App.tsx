@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/app-shell'
 import { IssueView } from './components/issue-view'
-import { CyclesView, ProjectsView } from './components/plan-views'
+import { CyclesView, ProjectDetail, ProjectsView } from './components/plan-views'
 import { StoreProvider } from './hooks/use-nock'
 import { IdbPersistence } from './lib/persist'
 import { NockStore } from './lib/store'
@@ -56,7 +56,7 @@ export default function App() {
         <HashRouter>
           <Routes>
             <Route element={<AppShell />}>
-              <Route path="/" element={<Navigate to="/inbox" replace />} />
+              <Route path="/" element={<Navigate to="/projects" replace />} />
               <Route path="/inbox" element={<IssueView view="inbox" />} />
               <Route path="/my-issues" element={<IssueView view="my-issues" />} />
               <Route path="/eng/all" element={<IssueView view="all" />} />
@@ -64,6 +64,7 @@ export default function App() {
               <Route path="/eng/backlog" element={<IssueView view="backlog" />} />
               <Route path="/eng/board" element={<IssueView view="board" />} />
               <Route path="/projects" element={<ProjectsView />} />
+              <Route path="/projects/:projectId" element={<ProjectDetail />} />
               <Route path="/cycles" element={<CyclesView />} />
             </Route>
           </Routes>

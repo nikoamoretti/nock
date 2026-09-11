@@ -160,6 +160,8 @@ export function createBootstrapSnapshot(options?: {
       name: 'Local-first sync',
       description: 'In-memory object pool, IndexedDB, and a transaction log.',
       status: 'started',
+      area: 'Infrastructure',
+      health: 'on-track',
       createdAt: now - 12 * 86400000,
       updatedAt: now,
       syncId: 1,
@@ -170,6 +172,8 @@ export function createBootstrapSnapshot(options?: {
       name: 'Command palette',
       description: 'Keyboard-first actions and jump-to-issue search.',
       status: 'planned',
+      area: 'Product',
+      health: 'no-update',
       createdAt: now - 4 * 86400000,
       updatedAt: now,
       syncId: 2,
@@ -199,6 +203,7 @@ export function createBootstrapSnapshot(options?: {
     projects,
     cycles,
     issues: [],
+    projectUpdates: [],
   }
 
   if (options?.demo) {

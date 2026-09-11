@@ -1,7 +1,8 @@
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
 import { MemoryPersistence, type Persistence } from './persist'
-import { createBootstrapSnapshot, IDS } from './seed'
+import { createWorkspaceSnapshot } from './seed-roadmap'
+import { IDS } from './seed'
 import type {
   CreateIssueInput,
   Cycle,
@@ -13,6 +14,7 @@ import type {
   Layout,
   Priority,
   Project,
+  ProjectUpdate,
   PropertyMenuKind,
   Snapshot,
   Team,
@@ -78,6 +80,7 @@ export class NockStore {
   projects = new Map<string, Project>()
   cycles = new Map<string, Cycle>()
   issues = new Map<string, Issue>()
+  projectUpdates = new Map<string, ProjectUpdate>()
   ui!: UiState
 
   private listeners = new Set<() => void>()
@@ -99,7 +102,7 @@ export class NockStore {
 
   static async open(persist: Persistence): Promise<NockStore> {
     const loaded = await persist.load()
-    const snapshot = loaded ?? createBootstrapSnapshot({ demo: false })
+    const snapshot = loaded ?? createWorkspaceSnapshot()
     const store = NockStore.from(snapshot, persist)
     if (!loaded) {
       store.queuePersist()
@@ -133,7 +136,14 @@ export class NockStore {
       snapshot.labels.map((label) => [label.id, { ...label }]),
     )
     this.projects = new Map(
-      snapshot.projects.map((project) => [project.id, { ...project }]),
+      snapshot.projects.map((project) => [
+        project.id,
+        {
+          ...project,
+          area: project.area ?? '',
+          health: project.health ?? 'no-update',
+        },
+      ]),
     )
     this.cycles = new Map(
       snapshot.cycles.map((cycle) => [cycle.id, { ...cycle }]),
@@ -143,6 +153,9 @@ export class NockStore {
         issue.id,
         { ...issue, labelIds: [...issue.labelIds] },
       ]),
+    )
+    this.projectUpdates = new Map(
+      (snapshot.projectUpdates ?? []).map((update) => [update.id, { ...update }]),
     )
     this.ui = defaultUi(snapshot)
     this.repairCounters()
@@ -162,6 +175,9 @@ export class NockStore {
       issues: [...this.issues.values()].map((issue) => ({
         ...issue,
         labelIds: [...issue.labelIds],
+      })),
+      projectUpdates: [...this.projectUpdates.values()].map((update) => ({
+        ...update,
       })),
     }
   }
@@ -783,6 +799,22 @@ export class NockStore {
       .slice(0, 20)
   }
 
+  updatesForProject(projectId: string): ProjectUpdate[] {
+    return [...this.projectUpdates.values()]
+      .filter((update) => update.projectId === projectId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  latestUpdate(projectId: string): ProjectUpdate | undefined {
+    return this.updatesForProject(projectId)[0]
+  }
+
+  issuesForProject(projectId: string): Issue[] {
+    return [...this.issues.values()]
+      .filter((issue) => issue.projectId === projectId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  }
+
   projectProgress(projectId: string): {
     total: number
     completed: number
@@ -808,7 +840,7 @@ export class NockStore {
   }
 
   async resetDemo(): Promise<void> {
-    this.hydrate(createBootstrapSnapshot({ demo: false }))
+    this.hydrate(createWorkspaceSnapshot())
     this.emit()
     this.queuePersist()
     await this.flush()

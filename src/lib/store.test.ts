@@ -94,11 +94,12 @@ describe('NockStore', () => {
   it('round-trips through persistence', async () => {
     const persist = new MemoryPersistence()
     const store = await NockStore.open(persist)
-    expect([...store.issues.values()]).toHaveLength(0)
+    expect(store.issues.size).toBeGreaterThan(0)
+    const nextNumber = store.defaultTeam().issueCounter + 1
     store.createIssue({ title: 'Persisted', stateId: IDS.stateTodo })
     await store.flush()
     const again = await NockStore.open(persist)
-    expect(again.issueByIdentifier('ENG-1')?.title).toBe('Persisted')
+    expect(again.issueByIdentifier(`ENG-${nextNumber}`)?.title).toBe('Persisted')
   })
 
   it('composer from inbox lands in triage', () => {
