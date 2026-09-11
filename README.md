@@ -2,7 +2,7 @@
 
 Local-first issue tracker. Keyboard-first, Linear-inspired, **not Folium** and **not affiliated with Linear**.
 
-Issues live in an in-memory object pool, persisted to IndexedDB. The UI updates before disk I/O finishes — same idea as Linear’s client, implemented clean-room. See [docs/LINEAR.md](docs/LINEAR.md).
+Issues live in an in-memory object pool, persisted to IndexedDB. The UI updates before disk I/O finishes — same idea as Linear’s client, implemented clean-room. See [docs/LINEAR.md](docs/LINEAR.md) for architecture notes and [docs/LINEAR-UX.md](docs/LINEAR-UX.md) for the Cursor-native UX spec (shortcuts, peek, list/board, filters, triage) to close the gap with Linear.
 
 ## Run
 
