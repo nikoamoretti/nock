@@ -9,6 +9,8 @@ const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: 'Shift+V', action: 'Display options' },
   { keys: '⌘B', action: 'Toggle list / board' },
   { keys: 'P / T / A', action: 'Priority / status / assignee' },
+  { keys: '[ / ]', action: 'Move board card to previous / next column' },
+  { keys: 'T', action: 'Set status (keyboard equivalent of board drag)' },
   { keys: '1 / 3', action: 'Triage accept / decline' },
   { keys: 'G then I T M A B P C', action: 'Go to a view' },
   { keys: '? or ⌘/', action: 'This overlay' },
@@ -21,7 +23,7 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
       onMouseDown={onClose}
     >
       <div
-        className="w-[480px] overflow-hidden rounded-xl border border-line bg-lift shadow-2xl"
+        className="nock-overlay w-[480px] overflow-hidden rounded-xl border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">

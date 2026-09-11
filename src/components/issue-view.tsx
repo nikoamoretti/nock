@@ -73,12 +73,16 @@ export function IssueView({ view }: { view: ViewId }) {
                 <HeaderButton
                   label="Accept"
                   hint="1"
-                  onClick={() => store.acceptTriage('inbox')}
+                  onClick={() =>
+                    store.execute({ type: 'issue.acceptTriage', view: 'inbox' })
+                  }
                 />
                 <HeaderButton
                   label="Decline"
                   hint="3"
-                  onClick={() => store.declineTriage('inbox')}
+                  onClick={() =>
+                    store.execute({ type: 'issue.declineTriage', view: 'inbox' })
+                  }
                 />
               </>
             )}
@@ -318,7 +322,12 @@ function Board({ issues }: { issues: Issue[] }) {
             onDrop={(event) => {
               event.preventDefault()
               const id = event.dataTransfer.getData('text/nock-issue')
-              if (id) store.updateIssue(id, { stateId: state.id })
+              if (id)
+                store.execute({
+                  type: 'issue.moveToState',
+                  id,
+                  stateId: state.id,
+                })
             }}
           >
             <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-mute">
@@ -400,14 +409,18 @@ export function IssuePeek() {
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
-                onClick={() => store.acceptTriage('inbox')}
+                onClick={() =>
+                  store.execute({ type: 'issue.acceptTriage', view: 'inbox' })
+                }
               >
                 Accept
               </button>
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
-                onClick={() => store.declineTriage('inbox')}
+                onClick={() =>
+                  store.execute({ type: 'issue.declineTriage', view: 'inbox' })
+                }
               >
                 Decline
               </button>
@@ -426,14 +439,22 @@ export function IssuePeek() {
         <input
           value={issue.title}
           onChange={(event) =>
-            store.updateIssue(issue.id, { title: event.target.value })
+            store.execute({
+              type: 'issue.update',
+              id: issue.id,
+              patch: { title: event.target.value },
+            })
           }
           className="w-full bg-transparent text-[18px] font-medium outline-none"
         />
         <textarea
           value={issue.description}
           onChange={(event) =>
-            store.updateIssue(issue.id, { description: event.target.value })
+            store.execute({
+              type: 'issue.update',
+              id: issue.id,
+              patch: { description: event.target.value },
+            })
           }
           placeholder="Add description…"
           rows={8}

@@ -208,4 +208,109 @@ describe('NockStore', () => {
     expect(store.issue(a.id)?.priority).toBe(2)
     expect(store.issue(b.id)?.priority).toBe(2)
   })
+
+  it('routes issue mutations through execute', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const created = store.execute({
+      type: 'issue.create',
+      input: { title: 'Via command', stateId: IDS.stateTodo },
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok || !created.issueId) throw new Error('expected create')
+    const issueId = created.issueId
+    expect(store.issue(issueId)?.title).toBe('Via command')
+
+    store.highlightIssue(issueId)
+    expect(
+      store.execute({ type: 'issue.setProperty', kind: 'priority', value: 1 }).ok,
+    ).toBe(true)
+    expect(store.issue(issueId)?.priority).toBe(1)
+
+    expect(
+      store.execute({
+        type: 'issue.moveToState',
+        id: issueId,
+        stateId: IDS.stateProgress,
+      }).ok,
+    ).toBe(true)
+    expect(store.issue(issueId)?.stateId).toBe(IDS.stateProgress)
+
+    expect(
+      store.execute({
+        type: 'issue.update',
+        id: issueId,
+        patch: { title: 'Renamed' },
+      }).ok,
+    ).toBe(true)
+    expect(store.issue(issueId)?.title).toBe('Renamed')
+
+    expect(store.execute({ type: 'issue.create', input: { title: '  ' } }).ok).toBe(
+      false,
+    )
+  })
+
+  it('accepts triage through the same command as the inbox buttons', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const incoming = store.createIssue({
+      title: 'Incoming',
+      stateId: IDS.stateTriage,
+    })
+    store.highlightIssue(incoming.id)
+    expect(
+      store.execute({ type: 'issue.acceptTriage', view: 'inbox' }).ok,
+    ).toBe(true)
+    expect(store.issue(incoming.id)?.stateId).toBe(IDS.stateTodo)
+  })
+
+  it('moves a highlighted board card with the keyboard command', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const issue = store.createIssue({
+      title: 'Card',
+      stateId: IDS.stateTodo,
+    })
+    store.highlightIssue(issue.id)
+    expect(store.moveHighlightedAlongBoard(1).ok).toBe(true)
+    expect(store.issue(issue.id)?.stateId).toBe(IDS.stateProgress)
+    expect(store.moveHighlightedAlongBoard(-1).ok).toBe(true)
+    expect(store.issue(issue.id)?.stateId).toBe(IDS.stateTodo)
+  })
+
+  it('surfaces persist failure and reconciles on retry', async () => {
+    const persist = new FailThenSavePersistence()
+    const store = NockStore.from(
+      createBootstrapSnapshot({ demo: false }),
+      persist,
+    )
+    store.execute({
+      type: 'issue.create',
+      input: { title: 'Keep me', stateId: IDS.stateTodo },
+    })
+    await store.flush()
+    expect(store.persistError).toBe('disk full')
+    expect(persist.snapshot).toBeNull()
+    expect(store.issueByIdentifier('ENG-1')?.title).toBe('Keep me')
+    store.retryPersist()
+    await store.flush()
+    expect(store.persistError).toBeNull()
+    expect(persist.snapshot?.issues.some((row) => row.title === 'Keep me')).toBe(
+      true,
+    )
+  })
 })
+
+class FailThenSavePersistence implements Persistence {
+  snapshot: Snapshot | null = null
+  remainingFails = 1
+
+  async load(): Promise<Snapshot | null> {
+    return this.snapshot
+  }
+
+  async save(snapshot: Snapshot): Promise<void> {
+    if (this.remainingFails > 0) {
+      this.remainingFails -= 1
+      throw new Error('disk full')
+    }
+    this.snapshot = structuredClone(snapshot)
+  }
+}

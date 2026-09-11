@@ -4,16 +4,28 @@ import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
 import { searchFromFilters } from '../lib/url-filters'
 
-const COMMANDS = [
-  { id: 'new', label: 'New issue', hint: 'C', path: null },
+type PaletteCommand = {
+  id: string
+  label: string
+  hint: string
+  path?: string | null
+}
+
+const COMMANDS: PaletteCommand[] = [
+  { id: 'new', label: 'New issue', hint: 'C' },
+  { id: 'status', label: 'Set status', hint: 'T' },
+  { id: 'priority', label: 'Set priority', hint: 'P' },
+  { id: 'assignee', label: 'Assign', hint: 'A' },
+  { id: 'accept', label: 'Accept from inbox', hint: '1' },
+  { id: 'decline', label: 'Decline from inbox', hint: '3' },
   { id: 'inbox', label: 'Go to Inbox', hint: 'G I', path: '/inbox' },
   { id: 'mine', label: 'Go to My issues', hint: 'G M', path: '/my-issues' },
   { id: 'all', label: 'Go to All issues', hint: 'G A', path: '/eng/all' },
   { id: 'board', label: 'Toggle board layout', hint: '⌘B', path: '/eng/board' },
   { id: 'projects', label: 'Go to Projects', hint: 'G P', path: '/projects' },
   { id: 'cycles', label: 'Go to Cycles', hint: 'G C', path: '/cycles' },
-  { id: 'reset', label: 'Reload project map', hint: '', path: null },
-] as const
+  { id: 'reset', label: 'Reload project map', hint: '' },
+]
 
 export function CommandMenu() {
   const store = useNock()
@@ -39,13 +51,30 @@ export function CommandMenu() {
 
   if (!store.ui.commandOpen) return null
 
+  const run = (command: PaletteCommand) => {
+    store.closeCommand()
+    if (command.id === 'new') store.openComposer()
+    else if (command.id === 'reset') void store.resetDemo()
+    else if (command.id === 'status') store.openPropertyMenu('status')
+    else if (command.id === 'priority') store.openPropertyMenu('priority')
+    else if (command.id === 'assignee') store.openPropertyMenu('assignee')
+    else if (command.id === 'accept') {
+      store.execute({ type: 'issue.acceptTriage', view: 'inbox' })
+    } else if (command.id === 'decline') {
+      store.execute({ type: 'issue.declineTriage', view: 'inbox' })
+    } else if (command.id === 'board') {
+      store.setLayout('board')
+      go('/eng/all')
+    } else if (command.path) go(command.path)
+  }
+
   return (
     <div
       className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 pt-[16vh]"
       onMouseDown={() => store.dismissOverlays()}
     >
       <div
-        className="w-[540px] overflow-hidden rounded-xl border border-line bg-lift shadow-2xl"
+        className="nock-overlay w-[540px] overflow-hidden rounded-xl border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <input
@@ -61,15 +90,7 @@ export function CommandMenu() {
               key={command.id}
               type="button"
               className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-hover"
-              onClick={() => {
-                store.closeCommand()
-                if (command.id === 'new') store.openComposer()
-                else if (command.id === 'reset') void store.resetDemo()
-                else if (command.id === 'board') {
-                  store.setLayout('board')
-                  go('/eng/all')
-                } else if (command.path) go(command.path)
-              }}
+              onClick={() => run(command)}
             >
               <span>{command.label}</span>
               {command.hint && (

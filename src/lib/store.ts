@@ -1,3 +1,8 @@
+import {
+  commandError,
+  type CommandResult,
+  type DomainCommand,
+} from './commands'
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
 import { MemoryPersistence, type Persistence } from './persist'
@@ -83,6 +88,7 @@ export class NockStore {
   projectUpdates = new Map<string, ProjectUpdate>()
   ui!: UiState
 
+  persistError: string | null = null
   private listeners = new Set<() => void>()
   private persist: Persistence
   private persistChain: Promise<void> = Promise.resolve()
@@ -185,14 +191,75 @@ export class NockStore {
   queuePersist(): void {
     const snapshot = this.serialize()
     this.persistChain = this.persistChain
-      .then(() => this.persist.save(snapshot))
-      .catch((error: unknown) => {
-        console.error('[nock] persist failed', error)
+      .then(async () => {
+        await this.persist.save(snapshot)
+        if (this.persistError) {
+          this.persistError = null
+          this.emit()
+        }
       })
+      .catch((error: unknown) => {
+        const message = commandError(error)
+        console.error('[nock] persist failed', error)
+        if (this.persistError !== message) {
+          this.persistError = message
+          this.emit()
+        }
+      })
+  }
+
+  retryPersist(): void {
+    this.queuePersist()
   }
 
   flush(): Promise<void> {
     return this.persistChain
+  }
+
+  execute(command: DomainCommand): CommandResult {
+    try {
+      switch (command.type) {
+        case 'issue.create': {
+          const issue = this.createIssue(command.input)
+          return { ok: true, issueId: issue.id }
+        }
+        case 'issue.update':
+          this.updateIssue(command.id, command.patch)
+          return { ok: true, issueId: command.id }
+        case 'issue.setProperty':
+          this.applyProperty(command.kind, command.value)
+          return { ok: true }
+        case 'issue.acceptTriage':
+          this.acceptTriage(command.view)
+          return { ok: true }
+        case 'issue.declineTriage':
+          this.declineTriage(command.view)
+          return { ok: true }
+        case 'issue.moveToState':
+          this.updateIssue(command.id, { stateId: command.stateId })
+          return { ok: true, issueId: command.id }
+        default: {
+          const unseen: never = command
+          return { ok: false, error: `unknown command: ${JSON.stringify(unseen)}` }
+        }
+      }
+    } catch (error) {
+      return { ok: false, error: commandError(error) }
+    }
+  }
+
+  moveHighlightedAlongBoard(delta: number): CommandResult {
+    const issue = this.highlightedIssue()
+    if (!issue) return { ok: false, error: 'no highlighted issue' }
+    const columns = this.boardStates()
+    const index = columns.findIndex((state) => state.id === issue.stateId)
+    const next = columns[index + delta]
+    if (!next) return { ok: false, error: 'no adjacent column' }
+    return this.execute({
+      type: 'issue.moveToState',
+      id: issue.id,
+      stateId: next.id,
+    })
   }
 
   private repairCounters(): void {
@@ -591,16 +658,22 @@ export class NockStore {
   submitComposer(): Issue | null {
     const title = this.ui.composer.title.trim()
     if (!title) return null
-    const issue = this.createIssue({
-      title,
-      description: this.ui.composer.description,
-      teamId: this.ui.composer.teamId,
-      stateId: this.ui.composer.stateId,
-      assigneeId: this.ui.composer.assigneeId,
-      priority: this.ui.composer.priority,
-      projectId: this.ui.composer.projectId,
-      cycleId: this.ui.composer.cycleId,
+    const result = this.execute({
+      type: 'issue.create',
+      input: {
+        title,
+        description: this.ui.composer.description,
+        teamId: this.ui.composer.teamId,
+        stateId: this.ui.composer.stateId,
+        assigneeId: this.ui.composer.assigneeId,
+        priority: this.ui.composer.priority,
+        projectId: this.ui.composer.projectId,
+        cycleId: this.ui.composer.cycleId,
+      },
     })
+    if (!result.ok || !result.issueId) return null
+    const issue = this.issues.get(result.issueId)
+    if (!issue) return null
     this.ui.composerOpen = false
     this.ui.highlightedIssueId = issue.id
     this.ui.peekOpen = true
@@ -849,3 +922,4 @@ export class NockStore {
 
 export type { Persistence }
 export { MemoryPersistence }
+export type { CommandResult, DomainCommand }

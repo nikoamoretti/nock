@@ -24,7 +24,7 @@ export function Composer() {
       onMouseDown={() => store.dismissOverlays()}
     >
       <form
-        className="w-[640px] overflow-hidden rounded-xl border border-line bg-lift shadow-2xl"
+        className="nock-overlay w-[640px] overflow-hidden rounded-xl border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault()

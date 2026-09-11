@@ -65,7 +65,7 @@ export function PropertyMenu() {
   return (
     <div className="fixed inset-0 z-40" onMouseDown={() => store.dismissOverlays()}>
       <div
-        className="absolute left-1/2 top-[18%] w-[320px] -translate-x-1/2 overflow-hidden rounded-lg border border-line bg-lift shadow-2xl"
+        className="nock-overlay absolute left-1/2 top-[18%] w-[320px] -translate-x-1/2 overflow-hidden rounded-lg border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="border-b border-line px-3 py-2 text-[12px] text-mute">
@@ -84,7 +84,13 @@ export function PropertyMenu() {
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-hover',
                 option.active && 'bg-hover text-ink',
               )}
-              onClick={() => store.applyProperty(kind, option.value)}
+              onClick={() =>
+                store.execute({
+                  type: 'issue.setProperty',
+                  kind,
+                  value: option.value,
+                })
+              }
             >
               {option.icon}
               <span>{option.label}</span>

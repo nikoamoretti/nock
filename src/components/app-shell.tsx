@@ -6,6 +6,7 @@ import { searchFromFilters } from '../lib/url-filters'
 import { CommandMenu } from './command-menu'
 import { Composer } from './composer'
 import { HelpOverlay } from './help-overlay'
+import { PersistBanner } from './persist-banner'
 import { PropertyMenu } from './property-menu'
 import { Sidebar } from './sidebar'
 
@@ -120,12 +121,18 @@ export function AppShell() {
       }
       if (view === 'inbox' && event.key === '1') {
         event.preventDefault()
-        store.acceptTriage('inbox')
+        store.execute({ type: 'issue.acceptTriage', view: 'inbox' })
         return
       }
       if (view === 'inbox' && event.key === '3') {
         event.preventDefault()
-        store.declineTriage('inbox')
+        store.execute({ type: 'issue.declineTriage', view: 'inbox' })
+        return
+      }
+      if (event.key === '[' || event.key === ']') {
+        if (store.effectiveLayout(view) !== 'board') return
+        event.preventDefault()
+        store.moveHighlightedAlongBoard(event.key === '[' ? -1 : 1)
         return
       }
       if (event.key === 'p') {
@@ -156,6 +163,7 @@ export function AppShell() {
       <main className="flex min-w-0 flex-1">
         <Outlet />
       </main>
+      <PersistBanner />
       {store.ui.composerOpen && <Composer />}
       {store.ui.commandOpen && <CommandMenu />}
       {store.ui.helpOpen && <HelpOverlay onClose={() => store.toggleHelp()} />}

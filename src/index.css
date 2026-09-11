@@ -11,6 +11,11 @@
   --color-lift: #16181d;
   --color-hover: #1c1f27;
   --color-accent: #6b75f0;
+  --ease-ui: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-hover: 80ms;
+  --duration-popover: 120ms;
+  --duration-dialog: 160ms;
+  --duration-panel: 180ms;
 }
 
 html,
@@ -41,4 +46,49 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #2c2f36;
   border-radius: 99px;
+}
+
+@keyframes nock-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.nock-overlay {
+  animation: nock-overlay-in var(--duration-popover) var(--ease-ui);
+}
+
+button,
+a,
+[role='button'] {
+  transition:
+    background-color var(--duration-hover) var(--ease-ui),
+    color var(--duration-hover) var(--ease-ui),
+    border-color var(--duration-hover) var(--ease-ui);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    --duration-hover: 0ms;
+    --duration-popover: 0ms;
+    --duration-dialog: 0ms;
+    --duration-panel: 0ms;
+  }
+
+  .nock-overlay {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
 }
