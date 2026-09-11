@@ -2,32 +2,11 @@ import type { ReactNode } from 'react'
 import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
 import type { Priority, User } from '../lib/types'
+import { Avatar as UiAvatar } from '../ui/display'
 import { PriorityIcon, StatusIcon } from './icons'
 
-const AVATAR = ['#6b75f0', '#26b5ce', '#4cb782', '#f2994a', '#eb5757']
-
 export function Avatar({ user, size = 18 }: { user: User; size?: number }) {
-  const color = AVATAR[Math.abs(hash(user.id)) % AVATAR.length]
-  return (
-    <span
-      title={user.name}
-      className="inline-flex items-center justify-center rounded-full text-[10px] font-medium text-white"
-      style={{
-        width: size,
-        height: size,
-        background: color,
-        fontSize: Math.max(8, size * 0.42),
-      }}
-    >
-      {user.initials}
-    </span>
-  )
-}
-
-function hash(value: string): number {
-  let n = 0
-  for (const ch of value) n = (n * 31 + ch.charCodeAt(0)) | 0
-  return n
+  return <UiAvatar name={user.name} initials={user.initials} size={size} />
 }
 
 export function PropertyButton({

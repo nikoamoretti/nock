@@ -4,11 +4,11 @@ import type { Priority, WorkflowState } from '../lib/types'
 export function NockMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <rect width="24" height="24" rx="6" fill="#6b75f0" />
+      <rect width="24" height="24" rx="6" fill="var(--accent)" />
       <path
         d="M6 12h9M12 7l5 5-5 5"
         fill="none"
-        stroke="#fff"
+        stroke="var(--fg-on-accent)"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -67,7 +67,7 @@ export function StatusIcon({
           <path
             d="M4.2 7.1 6.2 9.2 9.8 5"
             fill="none"
-            stroke="#0b0c0e"
+            stroke="var(--bg-app)"
             strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -110,19 +110,20 @@ export function PriorityIcon({
   if (priority === 1) {
     return (
       <svg viewBox="0 0 14 14" style={style} aria-hidden="true">
-        <path d="M7 1.5 12.5 12H1.5L7 1.5Z" fill="#eb5757" />
+        <path d="M7 1.5 12.5 12H1.5L7 1.5Z" fill="var(--danger)" />
         <path
           d="M7 6v2.4"
-          stroke="#0b0c0e"
+          stroke="var(--bg-app)"
           strokeWidth="1.4"
           strokeLinecap="round"
         />
-        <circle cx="7" cy="10.4" r="0.7" fill="#0b0c0e" />
+        <circle cx="7" cy="10.4" r="0.7" fill="var(--bg-app)" />
       </svg>
     )
   }
   const bars = priority === 2 ? 3 : priority === 3 ? 2 : 1
-  const color = priority === 2 ? '#f2994a' : priority === 3 ? '#f2c94c' : '#8b9099'
+  const color =
+    priority === 2 ? 'var(--warning)' : priority === 3 ? 'var(--warning)' : 'var(--fg-secondary)'
   return (
     <svg viewBox="0 0 14 14" style={style} aria-hidden="true">
       {[0, 1, 2].map((i) => (
@@ -133,7 +134,7 @@ export function PriorityIcon({
           width="2.2"
           height={(i + 1) * 2.4}
           rx="0.6"
-          fill={i < bars ? color : '#2a2d33'}
+          fill={i < bars ? color : 'var(--border-strong)'}
         />
       ))}
     </svg>

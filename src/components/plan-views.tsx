@@ -6,10 +6,10 @@ import { HEALTH_LABELS, type Project, type ProjectHealth } from '../lib/types'
 import { IssuePeek, IssueRow } from './issue-view'
 
 const HEALTH_TONE: Record<ProjectHealth, string> = {
-  'on-track': 'text-[#4cb782]',
-  'at-risk': 'text-[#f2c94c]',
-  'off-track': 'text-[#eb5757]',
-  'no-update': 'text-dim',
+  'on-track': 'text-success',
+  'at-risk': 'text-warning',
+  'off-track': 'text-danger',
+  'no-update': 'text-muted',
 }
 
 export function ProjectsView() {

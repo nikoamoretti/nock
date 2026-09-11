@@ -6,6 +6,8 @@ import { CyclesView, ProjectDetail, ProjectsView } from './components/plan-views
 import { StoreProvider } from './hooks/use-nock'
 import { IdbPersistence } from './lib/persist'
 import { NockStore } from './lib/store'
+import { UiGallery } from './ui/gallery'
+import { ThemeProvider } from './ui/theme'
 
 let boot: Promise<NockStore> | null = null
 
@@ -14,7 +16,7 @@ function openWorkspace(): Promise<NockStore> {
   return boot
 }
 
-export default function App() {
+function WorkspaceLayout() {
   const [store, setStore] = useState<NockStore | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,7 +38,7 @@ export default function App() {
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center text-[13px] text-mute">
+      <div className="flex h-full items-center justify-center text-[13px] text-secondary">
         Failed to load Nock: {error}
       </div>
     )
@@ -44,7 +46,7 @@ export default function App() {
 
   if (!store) {
     return (
-      <div className="flex h-full items-center justify-center text-[13px] text-mute">
+      <div className="flex h-full items-center justify-center text-[13px] text-secondary">
         Loading workspace…
       </div>
     )
@@ -52,24 +54,31 @@ export default function App() {
 
   return (
     <StoreProvider store={store}>
-      <div className="h-full">
-        <HashRouter>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route path="/" element={<Navigate to="/projects" replace />} />
-              <Route path="/inbox" element={<IssueView view="inbox" />} />
-              <Route path="/my-issues" element={<IssueView view="my-issues" />} />
-              <Route path="/eng/all" element={<IssueView view="all" />} />
-              <Route path="/eng/active" element={<IssueView view="active" />} />
-              <Route path="/eng/backlog" element={<IssueView view="backlog" />} />
-              <Route path="/eng/board" element={<IssueView view="board" />} />
-              <Route path="/projects" element={<ProjectsView />} />
-              <Route path="/projects/:projectId" element={<ProjectDetail />} />
-              <Route path="/cycles" element={<CyclesView />} />
-            </Route>
-          </Routes>
-        </HashRouter>
-      </div>
+      <AppShell />
     </StoreProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/_ui" element={<UiGallery />} />
+          <Route element={<WorkspaceLayout />}>
+            <Route path="/" element={<Navigate to="/projects" replace />} />
+            <Route path="/inbox" element={<IssueView view="inbox" />} />
+            <Route path="/my-issues" element={<IssueView view="my-issues" />} />
+            <Route path="/eng/all" element={<IssueView view="all" />} />
+            <Route path="/eng/active" element={<IssueView view="active" />} />
+            <Route path="/eng/backlog" element={<IssueView view="backlog" />} />
+            <Route path="/eng/board" element={<IssueView view="board" />} />
+            <Route path="/projects" element={<ProjectsView />} />
+            <Route path="/projects/:projectId" element={<ProjectDetail />} />
+            <Route path="/cycles" element={<CyclesView />} />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </ThemeProvider>
   )
 }
