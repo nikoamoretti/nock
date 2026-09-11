@@ -33,14 +33,17 @@ class LatchPersistence implements Persistence {
 }
 
 describe('NockStore', () => {
-  it('mints ENG-N identifiers and increments lastSyncId', () => {
+  it('mints ENG-N identifiers and increments lastSyncId', async () => {
     const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
     const first = store.createIssue({ title: 'First' })
     const second = store.createIssue({ title: 'Second' })
     expect(first.identifier).toBe('ENG-1')
     expect(second.identifier).toBe('ENG-2')
-    expect(second.syncId).toBeGreaterThan(first.syncId)
-    expect(store.lastSyncId).toBe(second.syncId)
+    await store.flushSync()
+    expect(store.issue(second.id)!.revision).toBeGreaterThan(
+      store.issue(first.id)!.revision,
+    )
+    expect(store.lastSyncId).toBe(store.issue(second.id)!.syncId)
   })
 
   it('notifies subscribers before persist resolves', async () => {
@@ -65,19 +68,23 @@ describe('NockStore', () => {
     expect(persist.snapshot?.issues[0]?.title).toBe('Hello')
   })
 
-  it('keeps the higher syncId on conflicting writes', () => {
+  it('keeps the higher syncId on conflicting writes', async () => {
     const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
-    const issue = store.createIssue({ title: 'Local' })
+    const created = store.createIssue({ title: 'Local' })
+    await store.flushSync()
+    const issue = store.issue(created.id)!
     store.applyRemoteIssue({
       ...issue,
       title: 'Stale replica',
       syncId: issue.syncId - 1,
+      revision: issue.revision - 1,
     })
     expect(store.issue(issue.id)?.title).toBe('Local')
     store.applyRemoteIssue({
       ...issue,
-      title: ' fresher replica'.trim(),
+      title: 'fresher replica',
       syncId: issue.syncId + 4,
+      revision: issue.revision + 4,
     })
     expect(store.issue(issue.id)?.title).toBe('fresher replica')
     expect(store.lastSyncId).toBe(issue.syncId + 4)
@@ -97,7 +104,7 @@ describe('NockStore', () => {
     expect(store.issues.size).toBeGreaterThan(0)
     const nextNumber = store.defaultTeam().issueCounter + 1
     store.createIssue({ title: 'Persisted', stateId: IDS.stateTodo })
-    await store.flush()
+    await store.flushSync()
     const again = await NockStore.open(persist)
     expect(again.issueByIdentifier(`ENG-${nextNumber}`)?.title).toBe('Persisted')
   })
@@ -195,7 +202,14 @@ describe('NockStore', () => {
       false,
     )
     store.setFilter('priority', 1)
+    const fromView = store.issuesForView('all').find((row) => row.id === urgent.id)
+    expect(fromView).toBe(store.issue(urgent.id))
     expect(store.issuesForView('all').map((row) => row.id)).toEqual([urgent.id])
+    expect(store.issueIdsForView('all')).toEqual([urgent.id])
+    expect(store.viewQuery('all')).toEqual({
+      view: 'all',
+      filters: store.ui.filters,
+    })
   })
 
   it('bulk property changes apply to the selection', () => {
@@ -280,6 +294,7 @@ describe('NockStore', () => {
     const store = NockStore.from(
       createBootstrapSnapshot({ demo: false }),
       persist,
+      { online: false },
     )
     store.execute({
       type: 'issue.create',

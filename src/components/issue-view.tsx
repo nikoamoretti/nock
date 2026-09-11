@@ -44,7 +44,10 @@ export function IssueView({ view }: { view: ViewId }) {
     }
   }, [location.pathname, location.search, navigate, storeSearch])
 
-  const issues = store.issuesForView(view)
+  const issueIds = store.issueIdsForView(view)
+  const issues = issueIds
+    .map((id) => store.issue(id))
+    .filter((issue): issue is Issue => Boolean(issue))
   const layout = store.effectiveLayout(view)
   const groups = groupIssues(
     issues,

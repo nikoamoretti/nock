@@ -7,15 +7,17 @@ import {
 import { CommandSystem } from './command-system'
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
-import { cloneIssue, normalizeIssue } from './issue-model'
+import { cloneIssue, normalizeIssue, pickInverse } from './issue-model'
 import { MemoryPersistence, type Persistence } from './persist'
 import { createWorkspaceSnapshot } from './seed-roadmap'
 import { IDS } from './seed'
+import { ImmediateAckBackend, SyncEngine, type SyncBackend } from './sync'
 import type {
   CreateIssueInput,
   Cycle,
   DisplayProperty,
   GroupBy,
+  InversePatch,
   Issue,
   IssueFilters,
   Label,
@@ -31,6 +33,7 @@ import type {
   UiState,
   User,
   ViewId,
+  ViewQuery,
   WorkflowState,
   Workspace,
 } from './types'
@@ -83,6 +86,13 @@ export function layoutLockedToList(view: ViewId): boolean {
   return view === 'inbox' || view === 'projects' || view === 'cycles'
 }
 
+export type WriteOrigin = 'local' | 'remote' | 'revert'
+
+export type StoreOptions = {
+  backend?: SyncBackend
+  online?: boolean
+}
+
 export class NockStore {
   version = 0
   lastSyncId = 0
@@ -99,23 +109,28 @@ export class NockStore {
   projectUpdates = new Map<string, ProjectUpdate>()
   ui!: UiState
   commands: CommandSystem
+  sync: SyncEngine
 
   persistError: string | null = null
   private listeners = new Set<() => void>()
   private persist: Persistence
   private persistChain: Promise<void> = Promise.resolve()
 
-  constructor(persist: Persistence) {
+  constructor(persist: Persistence, backend: SyncBackend = new ImmediateAckBackend()) {
     this.persist = persist
+    this.sync = new SyncEngine(this, backend)
     this.commands = new CommandSystem(this)
   }
 
   static from(
     snapshot: Snapshot,
     persist: Persistence = new MemoryPersistence(),
+    options: StoreOptions = {},
   ): NockStore {
-    const store = new NockStore(persist)
+    const store = new NockStore(persist, options.backend)
+    if (options.online === false) store.sync.online = false
     store.hydrate(snapshot)
+    void store.sync.pump()
     return store
   }
 
@@ -123,6 +138,7 @@ export class NockStore {
     const loaded = await persist.load()
     const snapshot = loaded ?? createWorkspaceSnapshot()
     const store = NockStore.from(snapshot, persist)
+    store.listenToNetwork()
     if (!loaded) {
       store.queuePersist()
       await store.flush()
@@ -192,6 +208,7 @@ export class NockStore {
     this.ui = defaultUi(snapshot)
     this.repairCounters()
     this.commands?.undo.clear()
+    this.sync.hydrate(snapshot.pendingCommands ?? [], snapshot.seenMutationIds ?? [])
   }
 
   serialize(): Snapshot {
@@ -212,6 +229,18 @@ export class NockStore {
       projectUpdates: [...this.projectUpdates.values()].map((update) => ({
         ...update,
       })),
+      pendingCommands: this.sync.pending().map((command) => ({
+        ...command,
+        patch: command.patch ? { ...command.patch } : undefined,
+        snapshot: command.snapshot ? cloneIssue(command.snapshot) : undefined,
+        inverse:
+          command.inverse.type === 'restore'
+            ? { type: 'restore' as const, issue: cloneIssue(command.inverse.issue) }
+            : command.inverse.type === 'patch'
+              ? { type: 'patch' as const, patch: { ...command.inverse.patch } }
+              : { type: 'delete' as const },
+      })),
+      seenMutationIds: [...this.sync.seenMutationIds],
     }
   }
 
@@ -241,6 +270,26 @@ export class NockStore {
 
   flush(): Promise<void> {
     return this.persistChain
+  }
+
+  async flushSync(): Promise<void> {
+    await this.sync.pump()
+    await this.flush()
+  }
+
+  listenToNetwork(): void {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+      return
+    }
+    window.addEventListener('online', () => {
+      this.sync.setOnline(true)
+    })
+    window.addEventListener('offline', () => {
+      this.sync.setOnline(false)
+    })
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.sync.setOnline(false)
+    }
   }
 
   execute(command: DomainCommand): CommandResult {
@@ -297,11 +346,6 @@ export class NockStore {
       }
       team.issueCounter = max
     }
-  }
-
-  private nextSyncId(): number {
-    this.lastSyncId += 1
-    return this.lastSyncId
   }
 
   defaultTeam(): Team {
@@ -367,11 +411,28 @@ export class NockStore {
     return [...this.issues.values()].find((issue) => issue.identifier === needle)
   }
 
+  viewQuery(view: ViewId): ViewQuery {
+    return { view, filters: { ...this.ui.filters } }
+  }
+
+  issueIdsForView(view: ViewId): string[] {
+    return this.issuesForView(view).map((issue) => issue.id)
+  }
+
   issuesForView(view: ViewId): Issue[] {
-    return applyExtraFilters(
-      filterIssues(this.serialize(), dataView(view)),
+    const live = [...this.issues.values()]
+    const matched = applyExtraFilters(
+      filterIssues(
+        {
+          issues: live,
+          states: [...this.states.values()],
+          currentUserId: this.currentUserId,
+        },
+        dataView(view),
+      ),
       this.ui.filters,
     )
+    return matched.map((issue) => this.issues.get(issue.id)).filter((issue): issue is Issue => Boolean(issue))
   }
 
   effectiveLayout(view: ViewId): Layout {
@@ -385,25 +446,47 @@ export class NockStore {
   }
 
   private forgetIssue(id: string): void {
-    if (this.ui.highlightedIssueId === id) this.ui.highlightedIssueId = null
+    if (this.ui.highlightedIssueId === id) {
+      this.ui.highlightedIssueId = null
+      this.ui.peekOpen = false
+      this.dropModal('peek')
+    }
     this.ui.selectedIssueIds = this.ui.selectedIssueIds.filter((row) => row !== id)
     if (this.ui.selectionAnchorId === id) this.ui.selectionAnchorId = null
     if (!this.ui.highlightedIssueId) this.ui.peekOpen = false
   }
 
-  private putIssue(issue: Issue): Issue {
+  writeEntity(issue: Issue): void {
+    this.issues.set(issue.id, normalizeIssue(issue))
+  }
+
+  removeEntity(id: string): void {
+    this.issues.delete(id)
+    this.forgetIssue(id)
+  }
+
+  applyInversePatch(inverse: InversePatch, issueId: string): void {
+    if (inverse.type === 'patch') {
+      if (this.issues.get(issueId)) this.updateIssue(issueId, inverse.patch, 'revert')
+      return
+    }
+    if (inverse.type === 'delete') {
+      if (this.issues.get(issueId)) this.deleteIssue(issueId, 'revert')
+      return
+    }
+    this.restoreIssue(inverse.issue, 'revert')
+  }
+
+  private commitIssue(issue: Issue): Issue {
     const next = normalizeIssue({
       ...issue,
-      syncId: this.nextSyncId(),
       updatedAt: Date.now(),
     })
     this.issues.set(next.id, next)
-    this.emit()
-    this.queuePersist()
-    return next
+    return this.issues.get(next.id)!
   }
 
-  createIssue(input: CreateIssueInput): Issue {
+  createIssue(input: CreateIssueInput, origin: WriteOrigin = 'local'): Issue {
     const title = input.title.trim()
     if (!title) throw new Error('[nock] title is required')
     const team = this.teams.get(input.teamId ?? this.defaultTeam().id)
@@ -411,7 +494,7 @@ export class NockStore {
     team.issueCounter += 1
     const number = team.issueCounter
     const now = Date.now()
-    return this.putIssue({
+    const issue = this.commitIssue({
       id: crypto.randomUUID(),
       teamId: team.id,
       number,
@@ -435,12 +518,29 @@ export class NockStore {
       createdAt: now,
       updatedAt: now,
       syncId: 0,
+      revision: 0,
+      lastMutationId: null,
     })
+    if (origin === 'local') {
+      this.sync.enqueue({
+        kind: 'issue.upsert',
+        issueId: issue.id,
+        snapshot: cloneIssue(issue),
+        inverse: { type: 'delete' },
+        baseRevision: issue.revision,
+      })
+      this.queuePersist()
+      void this.sync.pump()
+    }
+    this.emit()
+    if (origin !== 'local') this.queuePersist()
+    return issue
   }
 
-  updateIssue(id: string, patch: IssuePatch): Issue {
+  updateIssue(id: string, patch: IssuePatch, origin: WriteOrigin = 'local'): Issue {
     const current = this.issues.get(id)
     if (!current) throw new Error(`[nock] issue not found: ${id}`)
+    const inverse = pickInverse(current, patch)
     const next: Issue = {
       ...current,
       ...patch,
@@ -448,6 +548,9 @@ export class NockStore {
       createdAt: current.createdAt,
       number: current.number,
       identifier: current.identifier,
+      revision: current.revision,
+      lastMutationId: current.lastMutationId,
+      syncId: current.syncId,
       labelIds: patch.labelIds ? [...patch.labelIds] : [...current.labelIds],
       subscriberIds: patch.subscriberIds
         ? [...patch.subscriberIds]
@@ -472,36 +575,77 @@ export class NockStore {
         next.identifier = formatIdentifier(team.key, team.issueCounter)
       }
     }
-    return this.putIssue(next)
+    const saved = this.commitIssue(next)
+    if (origin === 'local') {
+      this.sync.enqueue({
+        kind: 'issue.upsert',
+        issueId: saved.id,
+        patch,
+        inverse: { type: 'patch', patch: inverse },
+        baseRevision: current.revision,
+      })
+      this.queuePersist()
+      void this.sync.pump()
+    }
+    this.emit()
+    if (origin !== 'local') this.queuePersist()
+    return saved
   }
 
-  restoreIssue(issue: Issue): Issue {
-    const next = cloneIssue(issue)
-    this.issues.set(next.id, next)
+  restoreIssue(issue: Issue, origin: WriteOrigin = 'local'): Issue {
+    const next = this.commitIssue(cloneIssue(issue))
     const team = this.teams.get(next.teamId)
     if (team) team.issueCounter = Math.max(team.issueCounter, next.number)
+    if (origin === 'local') {
+      this.sync.enqueue({
+        kind: 'issue.upsert',
+        issueId: next.id,
+        snapshot: cloneIssue(next),
+        inverse: { type: 'delete' },
+        baseRevision: next.revision,
+      })
+      this.queuePersist()
+      void this.sync.pump()
+    }
     this.emit()
-    this.queuePersist()
+    if (origin !== 'local') this.queuePersist()
     return next
   }
 
-  deleteIssue(id: string): void {
-    if (!this.issues.delete(id)) throw new Error(`[nock] issue not found: ${id}`)
-    this.nextSyncId()
+  deleteIssue(id: string, origin: WriteOrigin = 'local'): void {
+    const current = this.issues.get(id)
+    if (!current) throw new Error(`[nock] issue not found: ${id}`)
+    const snapshot = cloneIssue(current)
+    this.issues.delete(id)
     this.forgetIssue(id)
+    if (origin === 'local') {
+      this.sync.enqueue({
+        kind: 'issue.delete',
+        issueId: id,
+        snapshot,
+        inverse: { type: 'restore', issue: snapshot },
+        baseRevision: current.revision,
+      })
+      this.queuePersist()
+      void this.sync.pump()
+    }
     this.emit()
-    this.queuePersist()
+    if (origin !== 'local') this.queuePersist()
   }
 
   applyRemoteIssue(issue: Issue): Issue {
-    const current = this.issues.get(issue.id)
-    if (current && current.syncId > issue.syncId) return current
-    this.issues.set(issue.id, normalizeIssue(issue))
-    if (issue.syncId > this.lastSyncId) this.lastSyncId = issue.syncId
-    this.repairCounters()
-    this.emit()
-    this.queuePersist()
-    return this.issues.get(issue.id)!
+    const revision = issue.revision ?? issue.syncId
+    const mutationId =
+      issue.lastMutationId && !this.sync.seenMutationIds.has(issue.lastMutationId)
+        ? issue.lastMutationId
+        : `remote:${issue.id}:${revision}`
+    this.sync.applyRemote({
+      mutationId,
+      revision,
+      issueId: issue.id,
+      issue: normalizeIssue(issue),
+    })
+    return this.issues.get(issue.id) ?? issue
   }
 
   highlightIssue(id: string | null): void {

@@ -689,6 +689,8 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
       createdAt,
       updatedAt: createdAt,
       syncId: syncId++,
+      revision: syncId - 1,
+      lastMutationId: null,
       milestoneId: null,
       subscriberIds: [IDS.userMe],
       relatedIssueIds: [],

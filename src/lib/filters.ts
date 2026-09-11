@@ -45,14 +45,18 @@ export function compareIssues(
 }
 
 export function filterIssues(
-  snapshot: Pick<Snapshot, 'issues' | 'states' | 'currentUserId'>,
+  source: {
+    issues: readonly Issue[]
+    states: readonly WorkflowState[]
+    currentUserId: string
+  },
   view: ViewId,
 ): Issue[] {
-  const { issues, states, currentUserId } = snapshot
-  return issues
+  const { issues, states, currentUserId } = source
+  return [...issues]
     .filter((issue) => {
       if (issue.archivedAt) return false
-      const state = stateById(states, issue.stateId)
+      const state = stateById([...states], issue.stateId)
       if (!state) return false
       switch (view) {
         case 'inbox':
@@ -76,7 +80,7 @@ export function filterIssues(
           return true
       }
     })
-    .sort((a, b) => compareIssues(a, b, states))
+    .sort((a, b) => compareIssues(a, b, [...states]))
 }
 
 export function groupByState(

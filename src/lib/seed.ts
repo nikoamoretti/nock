@@ -224,6 +224,8 @@ export function createBootstrapSnapshot(options?: {
     ],
     issues: [],
     projectUpdates: [],
+    pendingCommands: [],
+    seenMutationIds: [],
   }
 
   if (options?.demo) {
@@ -372,6 +374,8 @@ function demoIssues(now: number): Issue[] {
       createdAt: now - (rows.length - index) * 3600000,
       updatedAt: now - index * 60000,
       syncId: 3 + number,
+      revision: 3 + number,
+      lastMutationId: null,
       milestoneId: null,
       subscriberIds: [],
       relatedIssueIds: [],

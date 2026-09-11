@@ -158,6 +158,38 @@ export interface Issue {
   createdAt: number
   updatedAt: number
   syncId: number
+  revision: number
+  lastMutationId: string | null
+}
+
+export type MutationStatus =
+  | 'queued'
+  | 'sending'
+  | 'acknowledged'
+  | 'failed'
+  | 'conflict'
+
+export type InversePatch =
+  | { type: 'patch'; patch: Partial<Issue> }
+  | { type: 'delete' }
+  | { type: 'restore'; issue: Issue }
+
+export type QueuedCommand = {
+  clientMutationId: string
+  kind: 'issue.upsert' | 'issue.delete'
+  issueId: string
+  patch?: Partial<Issue>
+  snapshot?: Issue
+  inverse: InversePatch
+  status: MutationStatus
+  baseRevision: number
+  createdAt: number
+  error?: string
+}
+
+export type ViewQuery = {
+  view: ViewId
+  filters: IssueFilters
 }
 
 export interface Snapshot {
@@ -173,6 +205,8 @@ export interface Snapshot {
   milestones: Milestone[]
   issues: Issue[]
   projectUpdates: ProjectUpdate[]
+  pendingCommands: QueuedCommand[]
+  seenMutationIds: string[]
 }
 
 export interface CreateIssueInput {

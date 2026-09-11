@@ -9,7 +9,7 @@ describe('IdbPersistence', () => {
     const persist = new IdbPersistence()
     const first = NockStore.from(createBootstrapSnapshot({ demo: false }), persist)
     first.createIssue({ title: 'On disk' })
-    await first.flush()
+    await first.flushSync()
 
     const second = await NockStore.open(persist)
     expect(second.issueByIdentifier('ENG-1')?.title).toBe('On disk')

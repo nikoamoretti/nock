@@ -27,6 +27,8 @@ function issue(
     createdAt: 1,
     updatedAt: 1,
     syncId: 1,
+    revision: 1,
+    lastMutationId: null,
     ...patch,
   }
 }
