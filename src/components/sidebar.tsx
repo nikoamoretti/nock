@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
 import { isDesktopApp } from '../lib/desktop'
+import { searchFromFilters } from '../lib/url-filters'
 import { NockMark } from './icons'
 
 const TEAM_LINKS = [
@@ -53,7 +54,7 @@ export function Sidebar() {
       </nav>
       <div className="border-t border-line px-3 py-3 text-[11px] leading-5 text-dim">
         <div className="text-[12px] text-mute">{store.me().name}</div>
-        <div className="mt-1">C new · ⌘K command · G then I M A B</div>
+        <div className="mt-1">C new · Space peek · ? help · G then I T M A</div>
       </div>
     </aside>
   )
@@ -68,9 +69,10 @@ function SideLink({
   label: string
   count?: number
 }) {
+  const store = useNock()
   return (
     <NavLink
-      to={to}
+      to={`${to}${searchFromFilters(store.ui.filters)}`}
       className={({ isActive }) =>
         cn(
           'flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] text-mute hover:bg-hover hover:text-ink',

@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
 import { cn, formatShortDate } from '../lib/cn'
-import { groupByState } from '../lib/filters'
-import type { Issue, ViewId } from '../lib/types'
+import { filtersActive, groupIssues } from '../lib/filters'
+import type { DisplayProperty, Issue, ViewId } from '../lib/types'
+import { filtersFromSearch, searchFromFilters } from '../lib/url-filters'
+import { BulkBar } from './bulk-bar'
+import { DisplayMenu } from './display-menu'
+import { FilterMenu } from './filter-menu'
 import { PriorityIcon, StatusIcon } from './icons'
 import { Avatar } from './property-menu'
 
@@ -20,23 +25,95 @@ const TITLES: Record<ViewId, string> = {
 
 export function IssueView({ view }: { view: ViewId }) {
   const store = useNock()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const storeSearch = searchFromFilters(store.ui.filters)
+
+  useEffect(() => {
+    store.setFilters(filtersFromSearch(location.search))
+  }, [location.search, store])
+
+  useEffect(() => {
+    const current = searchFromFilters(filtersFromSearch(location.search))
+    if (current !== storeSearch) {
+      navigate(
+        { pathname: location.pathname, search: storeSearch },
+        { replace: true },
+      )
+    }
+  }, [location.pathname, location.search, navigate, storeSearch])
+
   const issues = store.issuesForView(view)
-  const groups = groupByState(issues, [...store.states.values()])
-  const selected = store.selectedIssue()
+  const layout = store.effectiveLayout(view)
+  const groups = groupIssues(
+    issues,
+    view === 'inbox' || layout === 'board' ? 'status' : store.ui.groupBy,
+    {
+    states: [...store.states.values()],
+    users: [...store.users.values()],
+    projects: [...store.projects.values()],
+  })
+  const peeked = store.peekedIssue()
+  const filterOn = filtersActive(store.ui.filters)
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <header
           data-tauri-drag-region
           className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4"
         >
-          <div className="text-[13px] font-medium">{TITLES[view]}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[13px] font-medium">{TITLES[view]}</div>
+            <span className="text-[12px] text-dim">{issues.length}</span>
+          </div>
           <div className="flex items-center gap-1">
-            {view !== 'inbox' && view !== 'my-issues' && (
+            {view === 'inbox' && (
               <>
-                <ViewSwitch to="/eng/all" active={view !== 'board'} label="List" />
-                <ViewSwitch to="/eng/board" active={view === 'board'} label="Board" />
+                <HeaderButton
+                  label="Accept"
+                  hint="1"
+                  onClick={() => store.acceptTriage('inbox')}
+                />
+                <HeaderButton
+                  label="Decline"
+                  hint="3"
+                  onClick={() => store.declineTriage('inbox')}
+                />
+              </>
+            )}
+            <HeaderButton
+              label="Filter"
+              hint="F"
+              active={filterOn || store.ui.filterMenuOpen}
+              onClick={() => store.toggleFilterMenu()}
+            />
+            <HeaderButton
+              label="Display"
+              hint="⇧V"
+              active={store.ui.displayMenuOpen}
+              onClick={() => store.toggleDisplayMenu()}
+            />
+            {view !== 'inbox' && (
+              <>
+                <ViewSwitch
+                  active={layout === 'list'}
+                  label="List"
+                  onClick={() => {
+                    store.setLayout('list')
+                    if (view === 'board') {
+                      navigate({
+                        pathname: '/eng/all',
+                        search: storeSearch,
+                      })
+                    }
+                  }}
+                />
+                <ViewSwitch
+                  active={layout === 'board'}
+                  label="Board"
+                  onClick={() => store.setLayout('board')}
+                />
               </>
             )}
             <button
@@ -48,7 +125,7 @@ export function IssueView({ view }: { view: ViewId }) {
             </button>
           </div>
         </header>
-        {view === 'board' ? (
+        {layout === 'board' ? (
           <Board issues={issues} />
         ) : (
           <div className="min-h-0 flex-1 overflow-auto">
@@ -56,25 +133,21 @@ export function IssueView({ view }: { view: ViewId }) {
               <Empty view={view} />
             ) : (
               groups.map((group) => {
-                const collapsed = store.ui.collapsedStateIds.includes(group.state.id)
+                const collapsed = store.ui.collapsedStateIds.includes(group.key)
                 return (
-                  <section key={group.state.id}>
+                  <section key={group.key}>
                     <button
                       type="button"
                       className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-line bg-fill/95 px-4 py-1.5 text-[12px] text-mute backdrop-blur"
-                      onClick={() => store.toggleCollapsed(group.state.id)}
+                      onClick={() => store.toggleCollapsed(group.key)}
                     >
-                      <StatusIcon state={group.state} />
-                      <span className="font-medium text-ink">{group.state.name}</span>
+                      {group.state && <StatusIcon state={group.state} />}
+                      <span className="font-medium text-ink">{group.label}</span>
                       <span className="text-dim">{group.issues.length}</span>
                     </button>
                     {!collapsed &&
                       group.issues.map((issue) => (
-                        <IssueRow
-                          key={issue.id}
-                          issue={issue}
-                          selected={selected?.id === issue.id}
-                        />
+                        <IssueRow key={issue.id} issue={issue} />
                       ))}
                   </section>
                 )
@@ -82,31 +155,61 @@ export function IssueView({ view }: { view: ViewId }) {
             )}
           </div>
         )}
+        <BulkBar />
       </div>
-      {selected && <IssuePeek />}
+      {peeked && <IssuePeek />}
+      <FilterMenu />
+      <DisplayMenu />
     </div>
   )
 }
 
-function ViewSwitch({
-  to,
-  active,
+function HeaderButton({
   label,
+  hint,
+  active,
+  onClick,
 }: {
-  to: string
-  active: boolean
   label: string
+  hint: string
+  active?: boolean
+  onClick: () => void
 }) {
   return (
-    <Link
-      to={to}
+    <button
+      type="button"
+      onClick={onClick}
       className={cn(
         'rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover hover:text-ink',
         active && 'bg-hover text-ink',
       )}
     >
       {label}
-    </Link>
+      <span className="ml-1 text-[10px] text-dim">{hint}</span>
+    </button>
+  )
+}
+
+function ViewSwitch({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover hover:text-ink',
+        active && 'bg-hover text-ink',
+      )}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -124,13 +227,7 @@ function Empty({ view }: { view: ViewId }) {
   )
 }
 
-export function IssueRow({
-  issue,
-  selected,
-}: {
-  issue: Issue
-  selected: boolean
-}) {
+export function IssueRow({ issue }: { issue: Issue }) {
   const store = useNock()
   const state = store.states.get(issue.stateId)
   const assignee = issue.assigneeId ? store.users.get(issue.assigneeId) : undefined
@@ -139,44 +236,69 @@ export function IssueRow({
   const labels = issue.labelIds
     .map((id) => store.labels.get(id))
     .filter((label) => label !== undefined)
+  const highlighted = store.ui.highlightedIssueId === issue.id
+  const selected = store.ui.selectedIssueIds.includes(issue.id)
+  const show = (property: DisplayProperty) =>
+    store.ui.displayProperties.includes(property)
 
   return (
     <button
       type="button"
-      onClick={() => store.selectIssue(issue.id)}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey) {
+          store.toggleSelect(issue.id)
+          return
+        }
+        store.clickIssue(issue.id)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === ' ' || event.code === 'Space') event.preventDefault()
+      }}
       className={cn(
         'flex w-full items-center gap-3 border-b border-line px-4 py-[7px] text-left hover:bg-hover',
-        selected && 'bg-hover',
+        highlighted && 'bg-hover',
+        selected && 'bg-accent/10',
       )}
     >
-      <PriorityIcon priority={issue.priority} />
-      <span className="w-14 shrink-0 text-[12px] tabular-nums text-mute">
-        {issue.identifier}
-      </span>
+      <span
+        className={cn(
+          'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border',
+          selected ? 'border-accent bg-accent' : 'border-dim/80',
+        )}
+      />
+      {show('priority') && <PriorityIcon priority={issue.priority} />}
+      {show('id') && (
+        <span className="w-14 shrink-0 text-[12px] tabular-nums text-mute">
+          {issue.identifier}
+        </span>
+      )}
       <span className="min-w-0 flex-1 truncate text-[13px]">{issue.title}</span>
-      <span className="hidden items-center gap-1 md:flex">
-        {labels.map((label) => (
-          <span
-            key={label.id}
-            className="rounded px-1.5 py-0.5 text-[11px] text-mute"
-            style={{ background: `${label.color}22`, color: label.color }}
-          >
-            {label.name}
-          </span>
-        ))}
-      </span>
-      {cycle && (
+      {show('labels') && (
+        <span className="hidden items-center gap-1 md:flex">
+          {labels.map((label) => (
+            <span
+              key={label.id}
+              className="rounded px-1.5 py-0.5 text-[11px] text-mute"
+              style={{ background: `${label.color}22`, color: label.color }}
+            >
+              {label.name}
+            </span>
+          ))}
+        </span>
+      )}
+      {show('cycle') && cycle && (
         <span className="hidden text-[12px] text-dim lg:inline">
           Cycle {cycle.number}
         </span>
       )}
-      {project && (
+      {show('project') && project && (
         <span className="hidden max-w-[140px] truncate text-[12px] text-dim xl:inline">
           {project.name}
         </span>
       )}
-      {assignee ? <Avatar user={assignee} /> : <span className="w-[18px]" />}
-      {state && <StatusIcon state={state} />}
+      {show('assignee') &&
+        (assignee ? <Avatar user={assignee} /> : <span className="w-[18px]" />)}
+      {show('status') && state && <StatusIcon state={state} />}
     </button>
   )
 }
@@ -219,6 +341,8 @@ function Board({ issues }: { issues: Issue[] }) {
 function BoardCard({ issue }: { issue: Issue }) {
   const store = useNock()
   const assignee = issue.assigneeId ? store.users.get(issue.assigneeId) : undefined
+  const highlighted = store.ui.highlightedIssueId === issue.id
+  const selected = store.ui.selectedIssueIds.includes(issue.id)
   return (
     <button
       type="button"
@@ -226,19 +350,31 @@ function BoardCard({ issue }: { issue: Issue }) {
       onDragStart={(event) => {
         event.dataTransfer.setData('text/nock-issue', issue.id)
       }}
-      onClick={() => store.selectIssue(issue.id)}
+      onClick={() => store.clickIssue(issue.id)}
+      onKeyDown={(event) => {
+        if (event.key === ' ' || event.code === 'Space') event.preventDefault()
+      }}
       className={cn(
         'w-full cursor-grab rounded-md border border-line bg-lift px-3 py-2 text-left hover:border-accent/50',
-        store.ui.selectedIssueId === issue.id && 'ring-1 ring-accent',
+        highlighted && 'ring-1 ring-accent',
+        selected && 'border-accent/70 bg-accent/10',
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="text-[13px] leading-5">{issue.title}</div>
-        <PriorityIcon priority={issue.priority} />
+        {store.ui.displayProperties.includes('priority') && (
+          <PriorityIcon priority={issue.priority} />
+        )}
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-[12px] text-mute">{issue.identifier}</span>
-        {assignee && <Avatar user={assignee} />}
+        {store.ui.displayProperties.includes('id') ? (
+          <span className="text-[12px] text-mute">{issue.identifier}</span>
+        ) : (
+          <span />
+        )}
+        {store.ui.displayProperties.includes('assignee') && assignee && (
+          <Avatar user={assignee} />
+        )}
       </div>
     </button>
   )
@@ -246,24 +382,45 @@ function BoardCard({ issue }: { issue: Issue }) {
 
 export function IssuePeek() {
   const store = useNock()
-  const issue = store.selectedIssue()
+  const issue = store.peekedIssue()
   if (!issue) return null
   const state = store.states.get(issue.stateId)
   const assignee = issue.assigneeId ? store.users.get(issue.assigneeId) : undefined
   const project = issue.projectId ? store.projects.get(issue.projectId) : undefined
   const cycle = issue.cycleId ? store.cycles.get(issue.cycleId) : undefined
+  const triage = state?.type === 'triage'
 
   return (
     <aside className="flex w-[420px] shrink-0 flex-col border-l border-line bg-fill">
       <div className="flex h-11 items-center justify-between border-b border-line px-3">
         <span className="text-[12px] text-mute">{issue.identifier}</span>
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
-          onClick={() => store.selectIssue(null)}
-        >
-          Close
-        </button>
+        <div className="flex items-center gap-1">
+          {triage && (
+            <>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
+                onClick={() => store.acceptTriage('inbox')}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
+                onClick={() => store.declineTriage('inbox')}
+              >
+                Decline
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
+            onClick={() => store.togglePeek()}
+          >
+            Close
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
         <input

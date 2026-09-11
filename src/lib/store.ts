@@ -1,12 +1,16 @@
-import { boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
+import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
 import { MemoryPersistence, type Persistence } from './persist'
 import { createBootstrapSnapshot, IDS } from './seed'
 import type {
   CreateIssueInput,
   Cycle,
+  DisplayProperty,
+  GroupBy,
   Issue,
+  IssueFilters,
   Label,
+  Layout,
   Priority,
   Project,
   PropertyMenuKind,
@@ -18,6 +22,7 @@ import type {
   WorkflowState,
   Workspace,
 } from './types'
+import { DEFAULT_DISPLAY_PROPERTIES, EMPTY_FILTERS } from './types'
 
 function defaultUi(snapshot: Snapshot): UiState {
   const team = snapshot.teams[0]
@@ -25,7 +30,16 @@ function defaultUi(snapshot: Snapshot): UiState {
     snapshot.states.find((state) => state.isDefault && state.teamId === team.id) ??
     snapshot.states[0]
   return {
-    selectedIssueId: null,
+    highlightedIssueId: null,
+    selectedIssueIds: [],
+    peekOpen: false,
+    layout: 'list',
+    groupBy: 'status',
+    displayProperties: [...DEFAULT_DISPLAY_PROPERTIES],
+    filters: { ...EMPTY_FILTERS },
+    filterMenuOpen: false,
+    displayMenuOpen: false,
+    helpOpen: false,
     composerOpen: false,
     commandOpen: false,
     commandQuery: '',
@@ -42,6 +56,14 @@ function defaultUi(snapshot: Snapshot): UiState {
       cycleId: currentCycle(snapshot.cycles)?.id ?? null,
     },
   }
+}
+
+export function dataView(view: ViewId): ViewId {
+  return view === 'board' ? 'all' : view
+}
+
+export function layoutLockedToList(view: ViewId): boolean {
+  return view === 'inbox' || view === 'projects' || view === 'cycles'
 }
 
 export class NockStore {
@@ -190,6 +212,10 @@ export class NockStore {
     return fallback
   }
 
+  canceledState(teamId: string): WorkflowState | undefined {
+    return this.statesForTeam(teamId).find((state) => state.type === 'canceled')
+  }
+
   stateById(id: string): WorkflowState {
     const state = this.states.get(id)
     if (!state) throw new Error(`[nock] state not found: ${id}`)
@@ -200,10 +226,30 @@ export class NockStore {
     return this.issues.get(id)
   }
 
-  selectedIssue(): Issue | undefined {
-    return this.ui.selectedIssueId
-      ? this.issues.get(this.ui.selectedIssueId)
+  highlightedIssue(): Issue | undefined {
+    return this.ui.highlightedIssueId
+      ? this.issues.get(this.ui.highlightedIssueId)
       : undefined
+  }
+
+  peekedIssue(): Issue | undefined {
+    if (!this.ui.peekOpen) return undefined
+    return this.highlightedIssue()
+  }
+
+  actionIssueIds(): string[] {
+    if (this.ui.selectedIssueIds.length > 0) return [...this.ui.selectedIssueIds]
+    if (this.ui.highlightedIssueId) return [this.ui.highlightedIssueId]
+    return []
+  }
+
+  actionIssue(): Issue | undefined {
+    const id = this.actionIssueIds()[0]
+    return id ? this.issues.get(id) : undefined
+  }
+
+  selectedIssue(): Issue | undefined {
+    return this.actionIssue()
   }
 
   issueByIdentifier(identifier: string): Issue | undefined {
@@ -212,11 +258,26 @@ export class NockStore {
   }
 
   issuesForView(view: ViewId): Issue[] {
-    return filterIssues(this.serialize(), view)
+    return applyExtraFilters(
+      filterIssues(this.serialize(), dataView(view)),
+      this.ui.filters,
+    )
+  }
+
+  effectiveLayout(view: ViewId): Layout {
+    if (layoutLockedToList(view)) return 'list'
+    if (view === 'board') return 'board'
+    return this.ui.layout
   }
 
   boardStates(): WorkflowState[] {
     return boardColumns(this.statesForTeam(this.defaultTeam().id))
+  }
+
+  private forgetIssue(id: string): void {
+    if (this.ui.highlightedIssueId === id) this.ui.highlightedIssueId = null
+    this.ui.selectedIssueIds = this.ui.selectedIssueIds.filter((row) => row !== id)
+    if (!this.ui.highlightedIssueId) this.ui.peekOpen = false
   }
 
   private putIssue(issue: Issue): Issue {
@@ -305,7 +366,7 @@ export class NockStore {
   deleteIssue(id: string): void {
     if (!this.issues.delete(id)) throw new Error(`[nock] issue not found: ${id}`)
     this.nextSyncId()
-    if (this.ui.selectedIssueId === id) this.ui.selectedIssueId = null
+    this.forgetIssue(id)
     this.emit()
     this.queuePersist()
   }
@@ -321,9 +382,148 @@ export class NockStore {
     return this.issues.get(issue.id)!
   }
 
-  selectIssue(id: string | null): void {
-    this.ui.selectedIssueId = id
+  highlightIssue(id: string | null): void {
+    this.ui.highlightedIssueId = id
     this.ui.propertyMenu = null
+    if (!id) this.ui.peekOpen = false
+    this.emit()
+  }
+
+  clickIssue(id: string): void {
+    this.ui.highlightedIssueId = id
+    this.ui.selectedIssueIds = [id]
+    this.ui.propertyMenu = null
+    this.emit()
+  }
+
+  clearSelection(): void {
+    this.ui.selectedIssueIds = []
+    this.emit()
+  }
+
+  toggleSelect(id?: string): void {
+    const target = id ?? this.ui.highlightedIssueId
+    if (!target) return
+    this.ui.highlightedIssueId = target
+    const selected = new Set(this.ui.selectedIssueIds)
+    if (selected.has(target)) selected.delete(target)
+    else selected.add(target)
+    this.ui.selectedIssueIds = [...selected]
+    this.emit()
+  }
+
+  togglePeek(): void {
+    if (!this.ui.highlightedIssueId) return
+    this.ui.peekOpen = !this.ui.peekOpen
+    this.ui.filterMenuOpen = false
+    this.ui.displayMenuOpen = false
+    this.emit()
+  }
+
+  openIssuePeek(id: string): void {
+    this.ui.highlightedIssueId = id
+    this.ui.peekOpen = true
+    this.ui.commandOpen = false
+    this.ui.propertyMenu = null
+    this.emit()
+  }
+
+  previewIssue(id: string): void {
+    this.ui.highlightedIssueId = id
+    this.ui.peekOpen = true
+    this.emit()
+  }
+
+  selectIssue(id: string | null): void {
+    if (!id) {
+      this.ui.highlightedIssueId = null
+      this.ui.selectedIssueIds = []
+      this.ui.peekOpen = false
+    } else {
+      this.ui.highlightedIssueId = id
+      this.ui.selectedIssueIds = [id]
+    }
+    this.ui.propertyMenu = null
+    this.emit()
+  }
+
+  setLayout(layout: Layout): void {
+    this.ui.layout = layout
+    this.emit()
+  }
+
+  toggleLayout(view?: ViewId): void {
+    if (view && layoutLockedToList(view)) return
+    this.ui.layout = this.ui.layout === 'list' ? 'board' : 'list'
+    this.emit()
+  }
+
+  setGroupBy(groupBy: GroupBy): void {
+    this.ui.groupBy = groupBy
+    this.ui.displayMenuOpen = false
+    this.emit()
+  }
+
+  toggleDisplayProperty(property: DisplayProperty): void {
+    const current = new Set(this.ui.displayProperties)
+    if (current.has(property)) current.delete(property)
+    else current.add(property)
+    this.ui.displayProperties = DEFAULT_DISPLAY_PROPERTIES.filter((item) =>
+      current.has(item),
+    )
+    this.emit()
+  }
+
+  setFilters(filters: IssueFilters): void {
+    const next = { ...EMPTY_FILTERS, ...filters }
+    if (
+      this.ui.filters.assigneeId === next.assigneeId &&
+      this.ui.filters.stateId === next.stateId &&
+      this.ui.filters.priority === next.priority &&
+      this.ui.filters.projectId === next.projectId &&
+      this.ui.filters.cycleId === next.cycleId
+    ) {
+      return
+    }
+    this.ui.filters = next
+    this.emit()
+  }
+
+  setFilter<K extends keyof IssueFilters>(key: K, value: IssueFilters[K]): void {
+    this.ui.filters = { ...this.ui.filters, [key]: value }
+    this.emit()
+  }
+
+  clearFilters(): void {
+    this.ui.filters = { ...EMPTY_FILTERS }
+    this.emit()
+  }
+
+  toggleFilterMenu(): void {
+    this.ui.filterMenuOpen = !this.ui.filterMenuOpen
+    this.ui.displayMenuOpen = false
+    this.ui.helpOpen = false
+    this.emit()
+  }
+
+  toggleDisplayMenu(): void {
+    this.ui.displayMenuOpen = !this.ui.displayMenuOpen
+    this.ui.filterMenuOpen = false
+    this.ui.helpOpen = false
+    this.emit()
+  }
+
+  toggleHelp(): void {
+    this.ui.helpOpen = !this.ui.helpOpen
+    this.ui.filterMenuOpen = false
+    this.ui.displayMenuOpen = false
+    this.emit()
+  }
+
+  closeMenus(): void {
+    this.ui.filterMenuOpen = false
+    this.ui.displayMenuOpen = false
+    this.ui.helpOpen = false
     this.emit()
   }
 
@@ -351,6 +551,9 @@ export class NockStore {
     this.ui.composerOpen = true
     this.ui.commandOpen = false
     this.ui.propertyMenu = null
+    this.ui.filterMenuOpen = false
+    this.ui.displayMenuOpen = false
+    this.ui.helpOpen = false
     this.ui.composer = {
       title: '',
       description: '',
@@ -383,7 +586,8 @@ export class NockStore {
       cycleId: this.ui.composer.cycleId,
     })
     this.ui.composerOpen = false
-    this.ui.selectedIssueId = issue.id
+    this.ui.highlightedIssueId = issue.id
+    this.ui.peekOpen = true
     this.emit()
     return issue
   }
@@ -393,6 +597,8 @@ export class NockStore {
     this.ui.composerOpen = false
     this.ui.commandQuery = ''
     this.ui.propertyMenu = null
+    this.ui.filterMenuOpen = false
+    this.ui.displayMenuOpen = false
     this.emit()
   }
 
@@ -407,6 +613,21 @@ export class NockStore {
   }
 
   dismissOverlays(): void {
+    if (this.ui.helpOpen) {
+      this.ui.helpOpen = false
+      this.emit()
+      return
+    }
+    if (this.ui.displayMenuOpen) {
+      this.ui.displayMenuOpen = false
+      this.emit()
+      return
+    }
+    if (this.ui.filterMenuOpen) {
+      this.ui.filterMenuOpen = false
+      this.emit()
+      return
+    }
     if (this.ui.propertyMenu) {
       this.ui.propertyMenu = null
       this.emit()
@@ -422,14 +643,24 @@ export class NockStore {
       this.emit()
       return
     }
-    if (this.ui.selectedIssueId) {
-      this.ui.selectedIssueId = null
+    if (this.ui.peekOpen) {
+      this.ui.peekOpen = false
+      this.emit()
+      return
+    }
+    if (this.ui.selectedIssueIds.length > 0) {
+      this.ui.selectedIssueIds = []
+      this.emit()
+      return
+    }
+    if (this.ui.highlightedIssueId) {
+      this.ui.highlightedIssueId = null
       this.emit()
     }
   }
 
   openPropertyMenu(kind: PropertyMenuKind): void {
-    if (!this.ui.selectedIssueId && !this.ui.composerOpen) return
+    if (this.actionIssueIds().length === 0 && !this.ui.composerOpen) return
     this.ui.propertyMenu = this.ui.propertyMenu === kind ? null : kind
     this.emit()
   }
@@ -457,36 +688,90 @@ export class NockStore {
       this.emit()
       return
     }
-    const issueId = this.ui.selectedIssueId
-    if (!issueId) return
-    if (kind === 'status') this.updateIssue(issueId, { stateId: String(value) })
-    if (kind === 'priority')
-      this.updateIssue(issueId, { priority: Number(value) as Priority })
-    if (kind === 'assignee')
-      this.updateIssue(issueId, {
-        assigneeId: normalized === null ? null : String(normalized),
-      })
-    if (kind === 'project')
-      this.updateIssue(issueId, {
-        projectId: normalized === null ? null : String(normalized),
-      })
-    if (kind === 'cycle')
-      this.updateIssue(issueId, {
-        cycleId: normalized === null ? null : String(normalized),
-      })
+    const ids = this.actionIssueIds()
+    if (ids.length === 0) return
+    const patch =
+      kind === 'status'
+        ? { stateId: String(value) }
+        : kind === 'priority'
+          ? { priority: Number(value) as Priority }
+          : kind === 'assignee'
+            ? { assigneeId: normalized === null ? null : String(normalized) }
+            : kind === 'project'
+              ? { projectId: normalized === null ? null : String(normalized) }
+              : { cycleId: normalized === null ? null : String(normalized) }
+    for (const issueId of ids) this.updateIssue(issueId, patch)
+    this.ui.propertyMenu = null
+    this.emit()
+  }
+
+  highlightRelative(view: ViewId, delta: number): void {
+    const issues = this.issuesForView(view)
+    if (issues.length === 0) return
+    const index = issues.findIndex(
+      (issue) => issue.id === this.ui.highlightedIssueId,
+    )
+    const nextIndex = Math.min(
+      issues.length - 1,
+      Math.max(0, (index < 0 ? (delta > 0 ? -1 : 0) : index) + delta),
+    )
+    this.ui.highlightedIssueId = issues[nextIndex].id
     this.ui.propertyMenu = null
     this.emit()
   }
 
   selectRelative(view: ViewId, delta: number): void {
-    const issues = this.issuesForView(view)
-    if (issues.length === 0) return
-    const index = issues.findIndex((issue) => issue.id === this.ui.selectedIssueId)
-    const nextIndex = Math.min(
-      issues.length - 1,
-      Math.max(0, (index < 0 ? (delta > 0 ? -1 : 0) : index) + delta),
+    this.highlightRelative(view, delta)
+  }
+
+  private triageTargets(): Issue[] {
+    return this.actionIssueIds()
+      .map((id) => this.issues.get(id))
+      .filter((issue): issue is Issue => {
+        if (!issue) return false
+        return this.states.get(issue.stateId)?.type === 'triage'
+      })
+  }
+
+  private highlightAfterLeaving(view: ViewId, removedIds: string[]): void {
+    const remaining = this.issuesForView(view)
+    this.ui.selectedIssueIds = this.ui.selectedIssueIds.filter(
+      (id) => !removedIds.includes(id),
     )
-    this.selectIssue(issues[nextIndex].id)
+    if (remaining.length === 0) {
+      this.ui.highlightedIssueId = null
+      this.ui.peekOpen = false
+      return
+    }
+    if (
+      this.ui.highlightedIssueId &&
+      remaining.some((issue) => issue.id === this.ui.highlightedIssueId)
+    ) {
+      return
+    }
+    this.ui.highlightedIssueId = remaining[0].id
+  }
+
+  acceptTriage(view: ViewId = 'inbox'): void {
+    const targets = this.triageTargets()
+    if (targets.length === 0) return
+    const defaultId = this.defaultState(this.defaultTeam().id).id
+    const removed = targets.map((issue) => issue.id)
+    for (const issue of targets) this.updateIssue(issue.id, { stateId: defaultId })
+    this.highlightAfterLeaving(view, removed)
+    this.emit()
+  }
+
+  declineTriage(view: ViewId = 'inbox'): void {
+    const canceled = this.canceledState(this.defaultTeam().id)
+    if (!canceled) return
+    const targets = this.triageTargets()
+    if (targets.length === 0) return
+    const removed = targets.map((issue) => issue.id)
+    for (const issue of targets)
+      this.updateIssue(issue.id, { stateId: canceled.id })
+    this.highlightAfterLeaving(view, removed)
+    this.emit()
   }
 
   searchIssues(query: string): Issue[] {

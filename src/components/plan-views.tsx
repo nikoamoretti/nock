@@ -1,7 +1,7 @@
 import { useNock } from '../hooks/use-nock'
 import { formatRange } from '../lib/cn'
 import { currentCycle } from '../lib/filters'
-import { IssueRow } from './issue-view'
+import { IssuePeek, IssueRow } from './issue-view'
 
 export function ProjectsView() {
   const store = useNock()
@@ -57,34 +57,33 @@ export function CyclesView() {
     : []
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <header
-        data-tauri-drag-region
-        className="flex h-11 items-center border-b border-line px-4 text-[13px] font-medium"
-      >
-        Cycles
-      </header>
-      {!cycle ? (
-        <div className="flex flex-1 items-center justify-center text-mute">
-          No active cycle
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
-          <div className="border-b border-line px-4 py-4">
-            <div className="text-[16px] font-medium">Cycle {cycle.number}</div>
-            <div className="mt-1 text-[12px] text-mute">
-              {formatRange(cycle.startsAt, cycle.endsAt)}
-            </div>
+    <div className="relative flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header
+          data-tauri-drag-region
+          className="flex h-11 items-center border-b border-line px-4 text-[13px] font-medium"
+        >
+          Cycles
+        </header>
+        {!cycle ? (
+          <div className="flex flex-1 items-center justify-center text-mute">
+            No active cycle
           </div>
-          {issues.map((issue) => (
-            <IssueRow
-              key={issue.id}
-              issue={issue}
-              selected={store.ui.selectedIssueId === issue.id}
-            />
-          ))}
-        </div>
-      )}
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <div className="border-b border-line px-4 py-4">
+              <div className="text-[16px] font-medium">Cycle {cycle.number}</div>
+              <div className="mt-1 text-[12px] text-mute">
+                {formatRange(cycle.startsAt, cycle.endsAt)}
+              </div>
+            </div>
+            {issues.map((issue) => (
+              <IssueRow key={issue.id} issue={issue} />
+            ))}
+          </div>
+        )}
+      </div>
+      {store.peekedIssue() && <IssuePeek />}
     </div>
   )
 }

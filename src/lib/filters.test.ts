@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterIssues, fuzzyMatch, groupByState } from './filters'
+import { applyExtraFilters, filterIssues, fuzzyMatch, groupByState } from './filters'
 import { createBootstrapSnapshot, IDS } from './seed'
 import type { Issue } from './types'
 
@@ -132,5 +132,54 @@ describe('filters', () => {
     expect(fuzzyMatch('eng-1', 'ENG-12 IndexedDB')).toBe(true)
     expect(fuzzyMatch('idb', 'IndexedDB bootstrap')).toBe(true)
     expect(fuzzyMatch('zzz', 'IndexedDB bootstrap')).toBe(false)
+  })
+
+  it('all issues exclude triage', () => {
+    const snapshot = createBootstrapSnapshot({ demo: false })
+    snapshot.issues = [
+      issue({
+        id: 'triage',
+        title: 'Triage',
+        stateId: IDS.stateTriage,
+      }),
+      issue({
+        id: 'todo',
+        title: 'Todo',
+        stateId: IDS.stateTodo,
+        identifier: 'ENG-2',
+        number: 2,
+      }),
+    ]
+    expect(filterIssues(snapshot, 'all').map((row) => row.id)).toEqual(['todo'])
+  })
+
+  it('extra filters narrow a view', () => {
+    const rows = [
+      issue({
+        id: 'mine',
+        title: 'Mine',
+        stateId: IDS.stateTodo,
+        assigneeId: IDS.userMe,
+        priority: 1,
+      }),
+      issue({
+        id: 'maya',
+        title: 'Maya',
+        stateId: IDS.stateTodo,
+        assigneeId: IDS.userMaya,
+        identifier: 'ENG-2',
+        number: 2,
+        priority: 4,
+      }),
+    ]
+    expect(
+      applyExtraFilters(rows, {
+        assigneeId: IDS.userMe,
+        stateId: null,
+        priority: 1,
+        projectId: null,
+        cycleId: null,
+      }).map((row) => row.id),
+    ).toEqual(['mine'])
   })
 })

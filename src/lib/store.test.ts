@@ -107,5 +107,103 @@ describe('NockStore', () => {
     const issue = store.submitComposer()
     expect(issue?.stateId).toBe(IDS.stateTriage)
     expect(store.ui.composerOpen).toBe(false)
+    expect(store.ui.highlightedIssueId).toBe(issue?.id)
+    expect(store.ui.peekOpen).toBe(true)
+  })
+
+  it('j/k highlight without selecting, x selects, space peeks', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: true }))
+    store.highlightRelative('all', 1)
+    const highlighted = store.ui.highlightedIssueId
+    expect(highlighted).toBeTruthy()
+    expect(store.ui.selectedIssueIds).toEqual([])
+    expect(store.ui.peekOpen).toBe(false)
+    store.toggleSelect()
+    expect(store.ui.selectedIssueIds).toEqual([highlighted])
+    store.togglePeek()
+    expect(store.ui.peekOpen).toBe(true)
+    expect(store.peekedIssue()?.id).toBe(highlighted)
+    store.dismissOverlays()
+    expect(store.ui.peekOpen).toBe(false)
+    expect(store.ui.selectedIssueIds).toEqual([highlighted])
+    store.dismissOverlays()
+    expect(store.ui.selectedIssueIds).toEqual([])
+    expect(store.ui.highlightedIssueId).toBe(highlighted)
+  })
+
+  it('clicking a row selects it without opening peek', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: true }))
+    const issue = store.issuesForView('all')[0]
+    store.clickIssue(issue.id)
+    expect(store.ui.highlightedIssueId).toBe(issue.id)
+    expect(store.ui.selectedIssueIds).toEqual([issue.id])
+    expect(store.ui.peekOpen).toBe(false)
+  })
+
+  it('accepts and declines triage', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const incoming = store.createIssue({
+      title: 'Incoming',
+      stateId: IDS.stateTriage,
+    })
+    store.highlightIssue(incoming.id)
+    store.acceptTriage()
+    expect(store.issue(incoming.id)?.stateId).toBe(IDS.stateTodo)
+    expect(store.issuesForView('inbox').map((row) => row.id)).not.toContain(
+      incoming.id,
+    )
+    const declined = store.createIssue({
+      title: 'No thanks',
+      stateId: IDS.stateTriage,
+    })
+    store.highlightIssue(declined.id)
+    store.declineTriage()
+    expect(store.issue(declined.id)?.stateId).toBe(IDS.stateCanceled)
+  })
+
+  it('toggles list/board layout on the same view', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: true }))
+    expect(store.effectiveLayout('all')).toBe('list')
+    store.toggleLayout('all')
+    expect(store.effectiveLayout('all')).toBe('board')
+    expect(store.effectiveLayout('inbox')).toBe('list')
+    store.toggleLayout('inbox')
+    expect(store.ui.layout).toBe('board')
+    expect(store.effectiveLayout('inbox')).toBe('list')
+  })
+
+  it('applies extra filters and keeps triage out of all', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    store.createIssue({
+      title: 'Triage only',
+      stateId: IDS.stateTriage,
+      priority: 1,
+    })
+    const urgent = store.createIssue({
+      title: 'Urgent todo',
+      stateId: IDS.stateTodo,
+      priority: 1,
+    })
+    store.createIssue({
+      title: 'Low',
+      stateId: IDS.stateTodo,
+      priority: 4,
+    })
+    expect(store.issuesForView('all').some((row) => row.stateId === IDS.stateTriage)).toBe(
+      false,
+    )
+    store.setFilter('priority', 1)
+    expect(store.issuesForView('all').map((row) => row.id)).toEqual([urgent.id])
+  })
+
+  it('bulk property changes apply to the selection', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const a = store.createIssue({ title: 'A', stateId: IDS.stateTodo })
+    const b = store.createIssue({ title: 'B', stateId: IDS.stateTodo })
+    store.clickIssue(a.id)
+    store.toggleSelect(b.id)
+    store.applyProperty('priority', 2)
+    expect(store.issue(a.id)?.priority).toBe(2)
+    expect(store.issue(b.id)?.priority).toBe(2)
   })
 })

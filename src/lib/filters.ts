@@ -1,5 +1,13 @@
-import type { Issue, Snapshot, StateType, ViewId, WorkflowState } from './types'
-import { PRIORITY_RANK, STATE_TYPE_ORDER } from './types'
+import type {
+  GroupBy,
+  Issue,
+  IssueFilters,
+  Snapshot,
+  StateType,
+  ViewId,
+  WorkflowState,
+} from './types'
+import { FILTER_UNASSIGNED, PRIORITY_LABELS, PRIORITY_RANK, STATE_TYPE_ORDER } from './types'
 
 export function stateById(
   states: WorkflowState[],
@@ -62,7 +70,7 @@ export function filterIssues(
         case 'backlog':
           return state.type === 'backlog'
         case 'all':
-          return true
+          return state.type !== 'triage'
         default:
           return true
       }
@@ -119,6 +127,107 @@ export function fuzzyMatch(query: string, text: string): boolean {
     if (i === q.length) return true
   }
   return false
+}
+
+export function applyExtraFilters(
+  issues: Issue[],
+  filters: IssueFilters,
+): Issue[] {
+  return issues.filter((issue) => {
+    if (filters.stateId && issue.stateId !== filters.stateId) return false
+    if (filters.priority !== null && issue.priority !== filters.priority)
+      return false
+    if (filters.projectId && issue.projectId !== filters.projectId) return false
+    if (filters.cycleId && issue.cycleId !== filters.cycleId) return false
+    if (filters.assigneeId === FILTER_UNASSIGNED) {
+      if (issue.assigneeId !== null) return false
+    } else if (filters.assigneeId && issue.assigneeId !== filters.assigneeId) {
+      return false
+    }
+    return true
+  })
+}
+
+export function filtersActive(filters: IssueFilters): boolean {
+  return (
+    filters.assigneeId !== null ||
+    filters.stateId !== null ||
+    filters.priority !== null ||
+    filters.projectId !== null ||
+    filters.cycleId !== null
+  )
+}
+
+export type IssueGroup = {
+  key: string
+  label: string
+  issues: Issue[]
+  state?: WorkflowState
+}
+
+export function groupIssues(
+  issues: Issue[],
+  groupBy: GroupBy,
+  lookup: {
+    states: WorkflowState[]
+    users: { id: string; name: string }[]
+    projects: { id: string; name: string }[]
+  },
+): IssueGroup[] {
+  if (groupBy === 'none') {
+    return issues.length ? [{ key: 'all', label: 'Issues', issues }] : []
+  }
+  if (groupBy === 'status') {
+    return groupByState(issues, lookup.states).map((group) => ({
+      key: group.state.id,
+      label: group.state.name,
+      issues: group.issues,
+      state: group.state,
+    }))
+  }
+  if (groupBy === 'priority') {
+    const order: Array<Issue['priority']> = [1, 2, 3, 4, 0]
+    return order
+      .map((priority) => ({
+        key: `p${priority}`,
+        label: PRIORITY_LABELS[priority],
+        issues: issues.filter((issue) => issue.priority === priority),
+      }))
+      .filter((group) => group.issues.length > 0)
+  }
+  if (groupBy === 'assignee') {
+    const groups: IssueGroup[] = []
+    const unassigned = issues.filter((issue) => issue.assigneeId === null)
+    if (unassigned.length) {
+      groups.push({ key: 'unassigned', label: 'Unassigned', issues: unassigned })
+    }
+    for (const user of lookup.users) {
+      const assigned = issues.filter((issue) => issue.assigneeId === user.id)
+      if (assigned.length) {
+        groups.push({ key: user.id, label: user.name, issues: assigned })
+      }
+    }
+    return groups
+  }
+  const byProject = new Map<string, Issue[]>()
+  const none: Issue[] = []
+  for (const issue of issues) {
+    if (!issue.projectId) none.push(issue)
+    else {
+      const list = byProject.get(issue.projectId) ?? []
+      list.push(issue)
+      byProject.set(issue.projectId, list)
+    }
+  }
+  const groups: IssueGroup[] = lookup.projects
+    .filter((project) => byProject.has(project.id))
+    .map((project) => ({
+      key: project.id,
+      label: project.name,
+      issues: byProject.get(project.id) ?? [],
+    }))
+  if (none.length) groups.push({ key: 'none', label: 'No project', issues: none })
+  return groups
 }
 
 export function currentCycle(

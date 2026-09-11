@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
+import { searchFromFilters } from '../lib/url-filters'
 
 const COMMANDS = [
   { id: 'new', label: 'New issue', hint: 'C', path: null },
   { id: 'inbox', label: 'Go to Inbox', hint: 'G I', path: '/inbox' },
   { id: 'mine', label: 'Go to My issues', hint: 'G M', path: '/my-issues' },
   { id: 'all', label: 'Go to All issues', hint: 'G A', path: '/eng/all' },
-  { id: 'board', label: 'Go to Board', hint: 'G B', path: '/eng/board' },
+  { id: 'board', label: 'Toggle board layout', hint: '⌘B', path: '/eng/board' },
   { id: 'projects', label: 'Go to Projects', hint: 'G P', path: '/projects' },
   { id: 'cycles', label: 'Go to Cycles', hint: 'G C', path: '/cycles' },
   { id: 'reset', label: 'Reset local demo data', hint: '', path: null },
@@ -31,6 +32,9 @@ export function CommandMenu() {
       ),
     [query],
   )
+  const go = (pathname: string) => {
+    navigate({ pathname, search: searchFromFilters(store.ui.filters) })
+  }
   const issues = store.searchIssues(query)
 
   if (!store.ui.commandOpen) return null
@@ -61,7 +65,10 @@ export function CommandMenu() {
                 store.closeCommand()
                 if (command.id === 'new') store.openComposer()
                 else if (command.id === 'reset') void store.resetDemo()
-                else if (command.path) navigate(command.path)
+                else if (command.id === 'board') {
+                  store.setLayout('board')
+                  go('/eng/all')
+                } else if (command.path) go(command.path)
               }}
             >
               <span>{command.label}</span>
@@ -81,11 +88,12 @@ export function CommandMenu() {
               type="button"
               className={cn(
                 'flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-hover',
+                store.ui.highlightedIssueId === issue.id && 'bg-hover',
               )}
+              onMouseEnter={() => store.previewIssue(issue.id)}
               onClick={() => {
-                store.closeCommand()
-                store.selectIssue(issue.id)
-                navigate('/eng/all')
+                store.openIssuePeek(issue.id)
+                go('/eng/all')
               }}
             >
               <span className="w-14 shrink-0 text-[12px] text-mute">

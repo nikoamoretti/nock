@@ -21,6 +21,39 @@ export type ViewId =
   | 'projects'
   | 'cycles'
 
+export type Layout = 'list' | 'board'
+
+export type GroupBy = 'status' | 'priority' | 'assignee' | 'project' | 'none'
+
+export type DisplayProperty =
+  | 'id'
+  | 'status'
+  | 'assignee'
+  | 'priority'
+  | 'project'
+  | 'cycle'
+  | 'labels'
+
+export interface IssueFilters {
+  assigneeId: string | null
+  stateId: string | null
+  priority: Priority | null
+  projectId: string | null
+  cycleId: string | null
+}
+
+export const FILTER_UNASSIGNED = '__unassigned__'
+
+export const DEFAULT_DISPLAY_PROPERTIES: DisplayProperty[] = [
+  'id',
+  'status',
+  'assignee',
+  'priority',
+  'project',
+  'cycle',
+  'labels',
+]
+
 export interface Workspace {
   id: string
   name: string
@@ -128,7 +161,16 @@ export interface CreateIssueInput {
 export type PropertyMenuKind = 'status' | 'priority' | 'assignee' | 'project' | 'cycle'
 
 export interface UiState {
-  selectedIssueId: string | null
+  highlightedIssueId: string | null
+  selectedIssueIds: string[]
+  peekOpen: boolean
+  layout: Layout
+  groupBy: GroupBy
+  displayProperties: DisplayProperty[]
+  filters: IssueFilters
+  filterMenuOpen: boolean
+  displayMenuOpen: boolean
+  helpOpen: boolean
   composerOpen: boolean
   commandOpen: boolean
   commandQuery: string
@@ -144,6 +186,14 @@ export interface UiState {
     projectId: string | null
     cycleId: string | null
   }
+}
+
+export const EMPTY_FILTERS: IssueFilters = {
+  assigneeId: null,
+  stateId: null,
+  priority: null,
+  projectId: null,
+  cycleId: null,
 }
 
 export const STATE_TYPE_ORDER: StateType[] = [
