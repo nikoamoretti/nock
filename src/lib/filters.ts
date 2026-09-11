@@ -1,0 +1,129 @@
+import type { Issue, Snapshot, StateType, ViewId, WorkflowState } from './types'
+import { PRIORITY_RANK, STATE_TYPE_ORDER } from './types'
+
+export function stateById(
+  states: WorkflowState[],
+  id: string,
+): WorkflowState | undefined {
+  return states.find((state) => state.id === id)
+}
+
+export function isOpenType(type: StateType): boolean {
+  return (
+    type === 'triage' ||
+    type === 'backlog' ||
+    type === 'unstarted' ||
+    type === 'started'
+  )
+}
+
+export function compareIssues(
+  a: Issue,
+  b: Issue,
+  states: WorkflowState[],
+): number {
+  const stateA = stateById(states, a.stateId)
+  const stateB = stateById(states, b.stateId)
+  const typeRank =
+    STATE_TYPE_ORDER.indexOf(stateA?.type ?? 'backlog') -
+    STATE_TYPE_ORDER.indexOf(stateB?.type ?? 'backlog')
+  if (typeRank !== 0) return typeRank
+  const pos = (stateA?.position ?? 0) - (stateB?.position ?? 0)
+  if (pos !== 0) return pos
+  const priority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+  if (priority !== 0) return priority
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+  return b.updatedAt - a.updatedAt
+}
+
+export function filterIssues(
+  snapshot: Pick<Snapshot, 'issues' | 'states' | 'currentUserId'>,
+  view: ViewId,
+): Issue[] {
+  const { issues, states, currentUserId } = snapshot
+  return issues
+    .filter((issue) => {
+      const state = stateById(states, issue.stateId)
+      if (!state) return false
+      switch (view) {
+        case 'inbox':
+          return state.type === 'triage'
+        case 'my-issues':
+          return issue.assigneeId === currentUserId && isOpenType(state.type)
+        case 'active':
+          return state.type === 'unstarted' || state.type === 'started'
+        case 'board':
+          return (
+            state.type === 'backlog' ||
+            state.type === 'unstarted' ||
+            state.type === 'started' ||
+            state.type === 'completed'
+          )
+        case 'backlog':
+          return state.type === 'backlog'
+        case 'all':
+          return true
+        default:
+          return true
+      }
+    })
+    .sort((a, b) => compareIssues(a, b, states))
+}
+
+export function groupByState(
+  issues: Issue[],
+  states: WorkflowState[],
+): { state: WorkflowState; issues: Issue[] }[] {
+  const groups = new Map<string, Issue[]>()
+  for (const issue of issues) {
+    const list = groups.get(issue.stateId) ?? []
+    list.push(issue)
+    groups.set(issue.stateId, list)
+  }
+  return [...states]
+    .sort((a, b) => {
+      const type =
+        STATE_TYPE_ORDER.indexOf(a.type) - STATE_TYPE_ORDER.indexOf(b.type)
+      if (type !== 0) return type
+      return a.position - b.position
+    })
+    .map((state) => ({ state, issues: groups.get(state.id) ?? [] }))
+    .filter((group) => group.issues.length > 0)
+}
+
+export function boardColumns(states: WorkflowState[]): WorkflowState[] {
+  return [...states]
+    .filter(
+      (state) =>
+        state.type === 'backlog' ||
+        state.type === 'unstarted' ||
+        state.type === 'started' ||
+        state.type === 'completed',
+    )
+    .sort((a, b) => {
+      const type =
+        STATE_TYPE_ORDER.indexOf(a.type) - STATE_TYPE_ORDER.indexOf(b.type)
+      if (type !== 0) return type
+      return a.position - b.position
+    })
+}
+
+export function fuzzyMatch(query: string, text: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const t = text.toLowerCase()
+  if (t.includes(q)) return true
+  let i = 0
+  for (const ch of t) {
+    if (ch === q[i]) i += 1
+    if (i === q.length) return true
+  }
+  return false
+}
+
+export function currentCycle(
+  cycles: Snapshot['cycles'],
+  now = Date.now(),
+): Snapshot['cycles'][number] | undefined {
+  return cycles.find((cycle) => now >= cycle.startsAt && now <= cycle.endsAt)
+}
