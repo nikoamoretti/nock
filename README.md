@@ -13,6 +13,15 @@ npm run dev
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
+## Mac app
+
+```bash
+npm run desktop:install
+open ~/Applications/Nock.app
+```
+
+That builds a Tauri app, copies it to `~/Applications/Nock.app`, and does not need a browser tab. Rust (`rustc`) is required for the first build.
+
 ## Shortcuts
 
 - `C` new issue

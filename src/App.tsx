@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/app-shell'
 import { IssueView } from './components/issue-view'
 import { CyclesView, ProjectsView } from './components/plan-views'
@@ -53,7 +53,7 @@ export default function App() {
   return (
     <StoreProvider store={store}>
       <div className="h-full">
-        <BrowserRouter>
+        <HashRouter>
           <Routes>
             <Route element={<AppShell />}>
               <Route path="/" element={<Navigate to="/inbox" replace />} />
@@ -67,7 +67,7 @@ export default function App() {
               <Route path="/cycles" element={<CyclesView />} />
             </Route>
           </Routes>
-        </BrowserRouter>
+        </HashRouter>
       </div>
     </StoreProvider>
   )

@@ -8,7 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tauri": "tauri",
+    "desktop": "tauri build --bundles app",
+    "desktop:dev": "tauri dev",
+    "desktop:install": "tauri build --bundles app && rm -rf \"$HOME/Applications/Nock.app\" && cp -R src-tauri/target/release/bundle/macos/Nock.app \"$HOME/Applications/Nock.app\""
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -17,6 +21,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

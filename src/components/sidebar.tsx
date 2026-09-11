@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
+import { isDesktopApp } from '../lib/desktop'
 import { NockMark } from './icons'
 
 const TEAM_LINKS = [
@@ -19,7 +20,13 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-line bg-side">
-      <div className="flex items-center gap-2 px-3 py-3">
+      <div
+        data-tauri-drag-region
+        className={cn(
+          'flex items-center gap-2 px-3 py-3',
+          isDesktopApp() && 'pt-10',
+        )}
+      >
         <NockMark className="h-5 w-5" />
         <div className="min-w-0">
           <div className="truncate text-[13px] font-medium">{store.workspace.name}</div>

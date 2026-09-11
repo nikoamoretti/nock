@@ -9,7 +9,10 @@ export function ProjectsView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-11 items-center border-b border-line px-4 text-[13px] font-medium">
+      <header
+        data-tauri-drag-region
+        className="flex h-11 items-center border-b border-line px-4 text-[13px] font-medium"
+      >
         Projects
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
@@ -55,7 +58,10 @@ export function CyclesView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-11 items-center border-b border-line px-4 text-[13px] font-medium">
+      <header
+        data-tauri-drag-region
+        className="flex h-11 items-center border-b border-line px-4 text-[13px] font-medium"
+      >
         Cycles
       </header>
       {!cycle ? (
