@@ -380,6 +380,19 @@ describe('NockStore', () => {
     store.setProjectDates(project.id, nextStart, nextEnd)
     expect(store.projects.get(project.id)?.startAt).toBe(nextStart)
   })
+
+  it('splits seeded notifications and archives the highlighted row', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    expect(store.notifications.size).toBeGreaterThan(0)
+    store.setInboxPane('priority')
+    const priority = store.inboxNotifications('priority')
+    expect(priority.length).toBeGreaterThan(0)
+    store.highlightNotification(priority[0]!.id)
+    store.archiveInbox(priority[0]!.id)
+    expect(store.inboxNotifications('priority').map((row) => row.id)).not.toContain(priority[0]!.id)
+    store.setDeliveryPreference('mention', false)
+    expect(store.inboxDelivery.mention).toBe(false)
+  })
 })
 
 class FailThenSavePersistence implements Persistence {

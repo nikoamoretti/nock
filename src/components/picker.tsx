@@ -235,6 +235,13 @@ export function PropertyMenu() {
       <CyclePicker store={store} onClose={close} />
     ) : kind === 'milestone' ? (
       <MilestonePicker store={store} onClose={close} />
+    ) : kind === 'duplicate' ? (
+      <SearchablePicker
+        title="Mark duplicate of"
+        items={pickerItems(store, 'duplicate')}
+        onClose={close}
+        onSelect={(item) => runProperty(store, 'duplicate', item.value)}
+      />
     ) : (
       <SearchablePicker
         title="Team"
@@ -368,6 +375,18 @@ function pickerItems(store: NockStore, kind: PropertyMenuKind): PickerItem[] {
       })),
     ]
   }
+  if (kind === 'duplicate') {
+    const self = store.actionIssue()?.id
+    return [...store.issues.values()]
+      .filter((issue) => !issue.archivedAt && issue.id !== self)
+      .slice(0, 50)
+      .map((issue) => ({
+        id: issue.id,
+        value: issue.id,
+        label: `${issue.identifier} ${issue.title}`,
+        keywords: issue.description,
+      }))
+  }
   return [...store.teams.values()].map((team) => ({
     id: team.id,
     value: team.id,
@@ -399,5 +418,7 @@ function runProperty(
       ids.includes(labelId) ? 'issue.removeLabel' : 'issue.addLabel',
       { labelId },
     )
+  } else if (kind === 'duplicate' && value) {
+    store.commands.run('issue.duplicateTriage', { issueId: String(value) })
   }
 }

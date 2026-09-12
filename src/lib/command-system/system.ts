@@ -107,7 +107,9 @@ export class CommandSystem {
       'issue.navigate',
       'issue.boardShift',
       'issue.acceptTriage',
+      'issue.duplicateTriage',
       'issue.declineTriage',
+      'issue.snoozeTriage',
       'surface.dismiss',
       'edit.undo',
     ])
@@ -125,7 +127,7 @@ export class CommandSystem {
       { keys: 'J / K / ↑ / ↓', action: 'Highlight next / previous' },
       { keys: 'Shift+J / K', action: 'Extend selection' },
       { keys: '[ / ]', action: 'Move board card to previous / next column' },
-      { keys: '1 / 3', action: 'Triage accept / decline' },
+      { keys: '1 / 2 / 3 / H', action: 'Triage accept / duplicate / decline / snooze' },
       { keys: 'G then I T M A B P C N Y', action: 'Go to a view' },
     )
     return rows

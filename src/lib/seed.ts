@@ -1,3 +1,4 @@
+import { seedInboxNotifications } from './inbox'
 import { normalizeIssue } from './issue-model'
 import type {
   Cycle,
@@ -305,6 +306,18 @@ export function createBootstrapSnapshot(options?: {
     activities: [],
     attachments: [],
     savedViews: [],
+    notifications: seedInboxNotifications(IDS.userMe, now),
+    triageRules: [
+      {
+        id: 'rule_bugs_to_jules',
+        name: 'Bugs to Jules',
+        enabled: true,
+        conditions: [{ field: 'label', value: IDS.labelBug }],
+        actions: [{ field: 'assignee', value: IDS.userJules }],
+      },
+    ],
+    customerRequests: [],
+    snoozes: {},
     pendingCommands: [],
     seenMutationIds: [],
   }

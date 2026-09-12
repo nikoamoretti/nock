@@ -75,9 +75,23 @@ export function IssueDetail({
               <button
                 type="button"
                 className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
+                onClick={() => store.commands.run('issue.duplicateTriage')}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
                 onClick={() => store.commands.run('issue.declineTriage')}
               >
                 Decline
+              </button>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
+                onClick={() => store.commands.run('issue.snoozeTriage')}
+              >
+                Snooze
               </button>
             </>
           )}

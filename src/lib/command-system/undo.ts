@@ -40,6 +40,8 @@ export function applyInverse(store: NockStore, inverse: InverseAction[]): void {
       }
     } else if (action.type === 'issue.restore') {
       for (const issue of action.issues) store.restoreIssue(issue)
+    } else if (action.type === 'snooze.set') {
+      store.restoreSnoozes(action.entries)
     } else {
       for (const row of action.patches) {
         if (store.issue(row.id)) store.updateIssue(row.id, row.patch)

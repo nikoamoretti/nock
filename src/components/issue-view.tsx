@@ -11,6 +11,7 @@ import { FilterMenu } from './filter-menu'
 import { IssueBoard } from './issue-board'
 import { IssuePeek } from './issue-detail'
 import { IssueList } from './issue-list'
+import { NotificationInbox } from './notification-inbox'
 
 const TITLES: Record<ViewId, string> = {
   inbox: 'Inbox',
@@ -93,12 +94,32 @@ export function IssueView({ view }: { view: ViewId }) {
         >
           <div className="flex items-center gap-2">
             <div className="text-[13px] font-medium">{TITLES[view]}</div>
+            {view === 'inbox' && (
+              <div className="ml-2 flex rounded-md border border-line text-[12px] font-normal">
+                {(['triage', 'priority', 'other'] as const).map((pane) => (
+                  <button
+                    key={pane}
+                    type="button"
+                    data-testid={`inbox-pane-${pane}`}
+                    className={cn(
+                      'px-2 py-1 capitalize',
+                      store.ui.inboxPane === pane ? 'bg-hover text-ink' : 'text-mute',
+                    )}
+                    onClick={() => store.setInboxPane(pane)}
+                  >
+                    {pane === 'triage' ? 'Queue' : pane === 'priority' ? 'Priority' : 'Other'}
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="text-[12px] text-dim" data-testid="issue-count">
-              {issues.length}
+              {view === 'inbox' && store.ui.inboxPane !== 'triage'
+                ? store.inboxNotifications(store.ui.inboxPane).length
+                : issues.length}
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {view === 'inbox' && (
+            {view === 'inbox' && store.ui.inboxPane === 'triage' && (
               <>
                 <HeaderButton
                   label="Accept"
@@ -106,9 +127,19 @@ export function IssueView({ view }: { view: ViewId }) {
                   onClick={() => store.commands.run('issue.acceptTriage')}
                 />
                 <HeaderButton
+                  label="Duplicate"
+                  hint="2"
+                  onClick={() => store.commands.run('issue.duplicateTriage')}
+                />
+                <HeaderButton
                   label="Decline"
                   hint="3"
                   onClick={() => store.commands.run('issue.declineTriage')}
+                />
+                <HeaderButton
+                  label="Snooze"
+                  hint="H"
+                  onClick={() => store.commands.run('issue.snoozeTriage')}
                 />
               </>
             )}
@@ -153,7 +184,9 @@ export function IssueView({ view }: { view: ViewId }) {
             </button>
           </div>
         </header>
-        {issues.length === 0 ? (
+        {view === 'inbox' && store.ui.inboxPane !== 'triage' ? (
+          <NotificationInbox pane={store.ui.inboxPane} />
+        ) : issues.length === 0 ? (
           <Empty view={view} />
         ) : layout === 'board' ? (
           <IssueBoard issues={issues} />

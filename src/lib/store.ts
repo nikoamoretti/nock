@@ -6,6 +6,7 @@ import {
 } from './commands'
 import { CommandSystem } from './command-system'
 import { astFromFilters } from './filter-ast'
+import { splitInbox, markAllRead, defaultDeliveryPreferences, type DeliveryPreferences, type InboxNotification } from './inbox'
 import {
   classifyCycles,
   normalizeCycle,
@@ -13,6 +14,14 @@ import {
   normalizeProject,
   rolloverCycle,
 } from './planning'
+import {
+  applyTriageRules,
+  isSnoozed,
+  mergeSupportLinks,
+  snoozeUntil,
+  type CustomerRequest,
+  type TriageRule,
+} from './triage'
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
 import { cloneIssue, normalizeIssue, pickInverse } from './issue-model'
@@ -87,6 +96,8 @@ function defaultUi(snapshot: Snapshot): UiState {
     commandOpen: false,
     commandQuery: '',
     propertyMenu: null,
+    inboxPane: 'triage',
+    highlightedNotificationId: null,
     collapsedStateIds: [],
     selectionAnchorId: null,
     modalStack: [],
@@ -141,6 +152,11 @@ export class NockStore {
   activities = new Map<string, IssueActivity>()
   attachments = new Map<string, IssueLink>()
   savedViews = new Map<string, SavedView>()
+  notifications = new Map<string, InboxNotification>()
+  customerRequests = new Map<string, CustomerRequest>()
+  snoozes = new Map<string, number>()
+  triageRules: TriageRule[] = []
+  inboxDelivery: DeliveryPreferences = defaultDeliveryPreferences()
   ui!: UiState
   commands: CommandSystem
   sync: SyncEngine
@@ -264,6 +280,18 @@ export class NockStore {
     this.savedViews = new Map(
       (snapshot.savedViews ?? []).map((row) => [row.id, structuredClone(row)]),
     )
+    this.notifications = new Map(
+      (snapshot.notifications ?? []).map((row) => [row.id, { ...row }]),
+    )
+    this.customerRequests = new Map(
+      (snapshot.customerRequests ?? []).map((row) => [row.id, { ...row }]),
+    )
+    this.snoozes = new Map(Object.entries(snapshot.snoozes ?? {}))
+    this.triageRules = (snapshot.triageRules ?? []).map((rule) => structuredClone(rule))
+    this.inboxDelivery = {
+      ...defaultDeliveryPreferences(),
+      ...snapshot.inboxDelivery,
+    }
     this.ui = defaultUi(snapshot)
     this.repairCounters()
     this.commands?.undo.clear()
@@ -297,6 +325,11 @@ export class NockStore {
       activities: [...this.activities.values()].map((row) => ({ ...row })),
       attachments: [...this.attachments.values()].map((row) => ({ ...row })),
       savedViews: [...this.savedViews.values()].map((row) => structuredClone(row)),
+      notifications: [...this.notifications.values()].map((row) => ({ ...row })),
+      customerRequests: [...this.customerRequests.values()].map((row) => ({ ...row })),
+      snoozes: Object.fromEntries(this.snoozes),
+      triageRules: this.triageRules.map((rule) => structuredClone(rule)),
+      inboxDelivery: { ...this.inboxDelivery },
       pendingCommands: this.sync.pending().map((command) => ({
         ...command,
         patch: command.patch ? { ...command.patch } : undefined,
@@ -504,7 +537,11 @@ export class NockStore {
       this.ui.filters,
       this.ui.filterAst,
     )
-    return matched.map((issue) => this.issues.get(issue.id)).filter((issue): issue is Issue => Boolean(issue))
+    const now = Date.now()
+    return matched
+      .map((issue) => this.issues.get(issue.id))
+      .filter((issue): issue is Issue => Boolean(issue))
+      .filter((issue) => view !== 'inbox' || !isSnoozed(this.snoozes.get(issue.id), now))
   }
 
   effectiveLayout(view: ViewId): Layout {
@@ -1238,6 +1275,13 @@ export class NockStore {
     }
     const ids = this.actionIssueIds()
     if (ids.length === 0) return
+    if (kind === 'duplicate') {
+      if (normalized) this.duplicateTriage(String(normalized))
+      this.ui.propertyMenu = null
+      this.dropModal('property')
+      this.emit()
+      return
+    }
     if (kind === 'label') {
       const labelId = String(value)
       for (const issueId of ids) {
@@ -1325,7 +1369,10 @@ export class NockStore {
     if (targets.length === 0) return
     const defaultId = this.defaultState(this.defaultTeam().id).id
     const removed = targets.map((issue) => issue.id)
-    for (const issue of targets) this.updateIssue(issue.id, { stateId: defaultId })
+    for (const issue of targets) {
+      const ruled = applyTriageRules(issue, this.triageRules)
+      this.updateIssue(issue.id, { ...ruled, stateId: ruled.stateId ?? defaultId })
+    }
     this.highlightAfterLeaving(view, removed)
     this.emit()
   }
@@ -1339,6 +1386,151 @@ export class NockStore {
     for (const issue of targets)
       this.updateIssue(issue.id, { stateId: canceled.id })
     this.highlightAfterLeaving(view, removed)
+    this.emit()
+  }
+
+  snoozeTriage(days = 1, view: ViewId = 'inbox'): void {
+    const targets = this.triageTargets()
+    if (targets.length === 0) return
+    const until = snoozeUntil(Date.now(), days)
+    const removed = targets.map((issue) => issue.id)
+    for (const id of removed) this.snoozes.set(id, until)
+    this.highlightAfterLeaving(view, removed)
+    this.emit()
+    this.queuePersist()
+  }
+
+  restoreSnoozes(entries: Array<{ id: string; until: number | null }>): void {
+    for (const row of entries) {
+      if (row.until == null) this.snoozes.delete(row.id)
+      else this.snoozes.set(row.id, row.until)
+    }
+    this.emit()
+    this.queuePersist()
+  }
+
+  duplicateTriage(canonicalId: string, view: ViewId = 'inbox'): void {
+    const canonical = this.issues.get(canonicalId)
+    const duplicateState = this.statesForTeam(this.defaultTeam().id).find(
+      (state) => state.type === 'duplicate',
+    )
+    if (!canonical || !duplicateState) return
+    const targets = this.triageTargets().filter((issue) => issue.id !== canonicalId)
+    if (targets.length === 0) return
+    const removed = targets.map((issue) => issue.id)
+    const merged = mergeSupportLinks({
+      fromId: targets[0]!.id,
+      intoId: canonicalId,
+      links: [...this.attachments.values()],
+      requests: [...this.customerRequests.values()],
+    })
+    this.attachments = new Map(merged.links.map((link) => [link.id, link]))
+    this.customerRequests = new Map(merged.requests.map((row) => [row.id, row]))
+    for (const extra of targets.slice(1)) {
+      const more = mergeSupportLinks({
+        fromId: extra.id,
+        intoId: canonicalId,
+        links: [...this.attachments.values()],
+        requests: [...this.customerRequests.values()],
+      })
+      this.attachments = new Map(more.links.map((link) => [link.id, link]))
+      this.customerRequests = new Map(more.requests.map((row) => [row.id, row]))
+    }
+    for (const issue of targets) {
+      this.updateIssue(issue.id, {
+        duplicateOfId: canonicalId,
+        stateId: duplicateState.id,
+      })
+    }
+    this.highlightAfterLeaving(view, removed)
+    this.emit()
+    this.queuePersist()
+  }
+
+  inboxNotifications(pane: 'priority' | 'other'): InboxNotification[] {
+    return splitInbox([...this.notifications.values()], this.currentUserId)[pane]
+  }
+
+  highlightNotification(id: string | null): void {
+    this.ui.highlightedNotificationId = id
+    this.emit()
+  }
+
+  highlightNotificationRelative(delta: number): void {
+    const pane = this.ui.inboxPane
+    if (pane === 'triage') return
+    const rows = this.inboxNotifications(pane)
+    if (rows.length === 0) return
+    const index = rows.findIndex((row) => row.id === this.ui.highlightedNotificationId)
+    const nextIndex = Math.min(
+      rows.length - 1,
+      Math.max(0, (index < 0 ? (delta > 0 ? -1 : 0) : index) + delta),
+    )
+    this.ui.highlightedNotificationId = rows[nextIndex]!.id
+    this.emit()
+  }
+
+  openNotification(id?: string): InboxNotification | null {
+    const pane = this.ui.inboxPane
+    if (pane === 'triage') return null
+    const target = id ?? this.ui.highlightedNotificationId
+    const row = target ? this.notifications.get(id ?? target) : undefined
+    if (!row) return null
+    this.ui.highlightedNotificationId = row.id
+    this.markInboxRead(row.id)
+    return row
+  }
+
+  setDeliveryPreference(type: InboxNotification['type'], enabled: boolean): void {
+    this.inboxDelivery = { ...this.inboxDelivery, [type]: enabled }
+    this.emit()
+    this.queuePersist()
+  }
+
+  markInboxRead(id?: string): void {
+    const now = Date.now()
+    if (id) {
+      const row = this.notifications.get(id)
+      if (row) this.notifications.set(id, { ...row, readAt: now })
+    } else {
+      for (const row of markAllRead([...this.notifications.values()], this.currentUserId, now)) {
+        this.notifications.set(row.id, row)
+      }
+    }
+    this.emit()
+    this.queuePersist()
+  }
+
+  archiveInbox(id: string): void {
+    const row = this.notifications.get(id)
+    if (!row) return
+    const pane = this.ui.inboxPane === 'triage' ? 'priority' : this.ui.inboxPane
+    const rows = this.inboxNotifications(pane)
+    const index = rows.findIndex((item) => item.id === id)
+    this.notifications.set(id, { ...row, archivedAt: Date.now() })
+    const remaining = this.inboxNotifications(pane)
+    if (this.ui.highlightedNotificationId === id) {
+      this.ui.highlightedNotificationId =
+        remaining[Math.min(index, remaining.length - 1)]?.id ?? null
+    }
+    this.emit()
+    this.queuePersist()
+  }
+
+  setInboxOverride(id: string, score: number | null): void {
+    const row = this.notifications.get(id)
+    if (!row) return
+    this.notifications.set(id, { ...row, priorityOverride: score })
+    this.emit()
+    this.queuePersist()
+  }
+
+  setInboxPane(pane: 'triage' | 'priority' | 'other'): void {
+    this.ui.inboxPane = pane
+    if (pane !== 'triage') {
+      const rows = this.inboxNotifications(pane)
+      this.ui.highlightedNotificationId = rows[0]?.id ?? null
+    }
     this.emit()
   }
 

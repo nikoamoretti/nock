@@ -760,5 +760,52 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
     issueCounter: issues.length,
   }
   snapshot.lastSyncId = syncId
+
+  const inbound = ['Inbound: login loop on Mac app', 'Inbound: board cards skip In Review', 'Inbound: duplicate ticket from support'].map(
+    (title, index) => {
+      const number = issues.length + index + 1
+      return {
+        id: `issue_inbox_${number}`,
+        teamId: IDS.teamEng,
+        number,
+        identifier: `ENG-${number}`,
+        title,
+        description: 'Needs triage. Process with 1 / 2 / 3 / H.',
+        priority: (index === 0 ? 1 : 3) as Priority,
+        stateId: IDS.stateTriage,
+        assigneeId: null,
+        projectId: null,
+        cycleId: null,
+        labelIds: [],
+        parentId: null,
+        sortOrder: number,
+        createdAt: now - index * 3600000,
+        updatedAt: now,
+        syncId: syncId++,
+        revision: syncId - 1,
+        lastMutationId: null,
+        milestoneId: null,
+        subscriberIds: [],
+        relatedIssueIds: [],
+        blockedByIds: [],
+        duplicateOfId: null,
+        archivedAt: null,
+      } satisfies Issue
+    },
+  )
+  snapshot.issues = [...issues, ...inbound]
+  snapshot.teams[0] = {
+    ...snapshot.teams[0],
+    issueCounter: snapshot.issues.length,
+  }
+  snapshot.notifications = (snapshot.notifications ?? []).map((row, index) => ({
+    ...row,
+    sourceType: row.type === 'project_update' ? 'project' : 'issue',
+    sourceId:
+      row.type === 'project_update'
+        ? snapshot.projects[0]?.id ?? null
+        : inbound[index % inbound.length]?.id ?? snapshot.issues[0]?.id ?? null,
+  }))
+  snapshot.lastSyncId = syncId
   return snapshot
 }

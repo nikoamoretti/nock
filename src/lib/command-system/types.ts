@@ -8,6 +8,7 @@ export type InverseAction =
   | { type: 'issue.delete'; ids: string[] }
   | { type: 'issue.restore'; issues: Issue[] }
   | { type: 'issue.patch'; patches: Array<{ id: string; patch: IssuePatch }> }
+  | { type: 'snooze.set'; entries: Array<{ id: string; until: number | null }> }
 
 export type UndoEntry = {
   label: string

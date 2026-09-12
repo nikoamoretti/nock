@@ -307,6 +307,11 @@ export interface Snapshot {
   activities: IssueActivity[]
   attachments: IssueLink[]
   savedViews: SavedView[]
+  notifications?: import('./inbox').InboxNotification[]
+  triageRules?: import('./triage').TriageRule[]
+  customerRequests?: import('./triage').CustomerRequest[]
+  snoozes?: Record<string, number>
+  inboxDelivery?: import('./inbox').DeliveryPreferences
   pendingCommands: QueuedCommand[]
   seenMutationIds: string[]
 }
@@ -334,6 +339,7 @@ export type PropertyMenuKind =
   | 'label'
   | 'milestone'
   | 'team'
+  | 'duplicate'
 
 export interface UiState {
   highlightedIssueId: string | null
@@ -359,6 +365,8 @@ export interface UiState {
   commandOpen: boolean
   commandQuery: string
   propertyMenu: PropertyMenuKind | null
+  inboxPane: 'triage' | 'priority' | 'other'
+  highlightedNotificationId: string | null
   collapsedStateIds: string[]
   selectionAnchorId: string | null
   modalStack: OverlayId[]

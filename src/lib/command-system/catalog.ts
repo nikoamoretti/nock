@@ -165,8 +165,29 @@ export function registerCatalog(system: CommandSystem): void {
     shortcut: { key: ' ' },
     keywords: ['peek', 'preview'],
     palette: false,
-    when: (ctx) => Boolean(ctx.highlightedId() || ctx.actionIds()[0]),
+    when: (ctx) => {
+      if (ctx.view === 'inbox' && ctx.store.ui.inboxPane !== 'triage') {
+        return Boolean(ctx.store.ui.highlightedNotificationId)
+      }
+      return Boolean(ctx.highlightedId() || ctx.actionIds()[0])
+    },
     run: (ctx, args) => {
+      if (ctx.view === 'inbox' && ctx.store.ui.inboxPane !== 'triage') {
+        const row = ctx.store.openNotification(stringArg(args, 'id'))
+        if (!row) return { ok: false, error: 'no notification' }
+        if (row.sourceType === 'issue' && row.sourceId) {
+          const issue = ctx.store.issue(row.sourceId) ?? ctx.store.issueByIdentifier(row.sourceId)
+          if (issue) {
+            ctx.navigate?.(issuePeekPath('inbox', issue.identifier))
+            return { ok: true }
+          }
+        }
+        if (row.sourceType === 'project' && row.sourceId) {
+          ctx.navigate?.(`/projects/${row.sourceId}`)
+          return { ok: true }
+        }
+        return { ok: true }
+      }
       const id = stringArg(args, 'id') ?? ctx.highlightedId() ?? ctx.actionIds()[0]
       if (!id) return { ok: false, error: 'no issue' }
       const issue = ctx.store.issue(id)
@@ -203,9 +224,18 @@ export function registerCatalog(system: CommandSystem): void {
     id: 'issue.navigate',
     label: 'Highlight issue',
     palette: false,
-    when: (ctx) => ctx.issues().length > 0,
+    when: (ctx) => {
+      if (ctx.view === 'inbox' && ctx.store.ui.inboxPane !== 'triage') {
+        return ctx.store.inboxNotifications(ctx.store.ui.inboxPane).length > 0
+      }
+      return ctx.issues().length > 0
+    },
     run: (ctx, args) => {
       const delta = typeof args?.delta === 'number' ? args.delta : 1
+      if (ctx.view === 'inbox' && ctx.store.ui.inboxPane !== 'triage') {
+        ctx.store.highlightNotificationRelative(delta)
+        return { ok: true }
+      }
       const extend = Boolean(args?.extend)
       if (extend && !ctx.store.ui.selectionAnchorId) {
         ctx.store.ui.selectionAnchorId = ctx.store.ui.highlightedIssueId
@@ -551,7 +581,8 @@ export function registerCatalog(system: CommandSystem): void {
     id: 'issue.acceptTriage',
     label: 'Accept from inbox',
     shortcut: { key: '1' },
-    when: (ctx) => ctx.view === 'inbox' && ctx.actionIds().length > 0,
+    when: (ctx) =>
+      ctx.view === 'inbox' && ctx.store.ui.inboxPane === 'triage' && ctx.actionIds().length > 0,
     run: (ctx) => {
       const ids = ctx.actionIds()
       const inverse: Array<{ id: string; patch: IssuePatch }> = ids
@@ -568,7 +599,8 @@ export function registerCatalog(system: CommandSystem): void {
     id: 'issue.declineTriage',
     label: 'Decline from inbox',
     shortcut: { key: '3' },
-    when: (ctx) => ctx.view === 'inbox' && ctx.actionIds().length > 0,
+    when: (ctx) =>
+      ctx.view === 'inbox' && ctx.store.ui.inboxPane === 'triage' && ctx.actionIds().length > 0,
     run: (ctx) => {
       const ids = ctx.actionIds()
       const inverse: Array<{ id: string; patch: IssuePatch }> = ids
@@ -577,6 +609,79 @@ export function registerCatalog(system: CommandSystem): void {
         .map((issue) => ({ id: issue.id, patch: { stateId: issue.stateId } }))
       ctx.store.execute({ type: 'issue.declineTriage', view: 'inbox' })
       if (inverse.length) system.undo.push('Decline triage', [{ type: 'issue.patch', patches: inverse }])
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'issue.duplicateTriage',
+    label: 'Mark duplicate from inbox',
+    shortcut: { key: '2' },
+    when: (ctx) =>
+      ctx.view === 'inbox' && ctx.store.ui.inboxPane === 'triage' && ctx.actionIds().length > 0,
+    run: (ctx, args) => {
+      const canonical = typeof args?.issueId === 'string' ? args.issueId : null
+      if (!canonical) return picker(ctx, 'duplicate')
+      const ids = ctx.actionIds()
+      const inverse: Array<{ id: string; patch: IssuePatch }> = ids
+        .map((id) => ctx.store.issue(id))
+        .filter((issue): issue is Issue => Boolean(issue))
+        .map((issue) => ({
+          id: issue.id,
+          patch: { stateId: issue.stateId, duplicateOfId: issue.duplicateOfId },
+        }))
+      ctx.store.duplicateTriage(canonical)
+      if (inverse.length) system.undo.push('Duplicate triage', [{ type: 'issue.patch', patches: inverse }])
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'issue.snoozeTriage',
+    label: 'Snooze from inbox',
+    shortcut: { key: 'h' },
+    when: (ctx) =>
+      ctx.view === 'inbox' && ctx.store.ui.inboxPane === 'triage' && ctx.actionIds().length > 0,
+    run: (ctx) => {
+      const ids = ctx.actionIds()
+      const previous = ids.map((id) => ({
+        id,
+        until: ctx.store.snoozes.get(id) ?? null,
+      }))
+      ctx.store.snoozeTriage(1)
+      if (previous.length) system.undo.push('Snooze triage', [{ type: 'snooze.set', entries: previous }])
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'inbox.archive',
+    label: 'Archive notification',
+    shortcut: { key: 'e' },
+    when: (ctx) =>
+      ctx.view === 'inbox' &&
+      ctx.store.ui.inboxPane !== 'triage' &&
+      Boolean(ctx.store.ui.highlightedNotificationId),
+    run: (ctx) => {
+      const id = ctx.store.ui.highlightedNotificationId
+      if (!id) return { ok: false, error: 'no notification' }
+      ctx.store.archiveInbox(id)
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'inbox.markRead',
+    label: 'Mark notification read',
+    shortcut: { key: 'u' },
+    when: (ctx) =>
+      ctx.view === 'inbox' &&
+      ctx.store.ui.inboxPane !== 'triage' &&
+      Boolean(ctx.store.ui.highlightedNotificationId),
+    run: (ctx) => {
+      const id = ctx.store.ui.highlightedNotificationId
+      if (!id) return { ok: false, error: 'no notification' }
+      ctx.store.markInboxRead(id)
       return { ok: true }
     },
   })
@@ -827,7 +932,11 @@ export function registerCatalog(system: CommandSystem): void {
   system.shortcuts.bind({ key: 'b', mod: true }, 'view.toggleLayout')
   system.shortcuts.bind({ key: ' ' }, 'issue.open')
   system.shortcuts.bind({ key: '1' }, 'issue.acceptTriage')
+  system.shortcuts.bind({ key: '2' }, 'issue.duplicateTriage')
   system.shortcuts.bind({ key: '3' }, 'issue.declineTriage')
+  system.shortcuts.bind({ key: 'h' }, 'issue.snoozeTriage')
+  system.shortcuts.bind({ key: 'e' }, 'inbox.archive')
+  system.shortcuts.bind({ key: 'u' }, 'inbox.markRead')
   system.shortcuts.bind({ key: '[' }, 'issue.boardShift', { delta: -1 })
   system.shortcuts.bind({ key: ']' }, 'issue.boardShift', { delta: 1 })
   system.shortcuts.bind({ key: '?' }, 'view.openHelp')
