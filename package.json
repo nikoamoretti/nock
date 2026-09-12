@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:sync": "concurrently -k -n api,web -c cyan,magenta \"npm run api\" \"vite\"",
+    "api": "tsx server/index.ts",
+    "graphql:types": "tsx server/graphql/generate-types.ts",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint src server",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
@@ -16,9 +19,13 @@
     "desktop:install": "tauri build --bundles app && rm -rf \"$HOME/Applications/Nock.app\" && cp -R src-tauri/target/release/bundle/macos/Nock.app \"$HOME/Applications/Nock.app\""
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "graphql": "^17.0.2",
+    "graphql-yoga": "^5.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.3"
+    "react-router-dom": "^7.18.3",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
@@ -30,10 +37,12 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.0"

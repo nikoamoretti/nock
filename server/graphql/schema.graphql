@@ -1,0 +1,386 @@
+scalar JSON
+
+type Query {
+  viewer: Viewer!
+  teams: [Team!]!
+  team(id: ID!): Team
+  issues(filter: IssueFilter, first: Int, after: String): IssueConnection!
+  issue(id: ID, identifier: String): Issue
+  projects: [Project!]!
+  project(id: ID!): Project
+  cycles: [Cycle!]!
+  initiatives: [Initiative!]!
+  search(query: String!): SearchResult!
+  bootstrap: BootstrapPayload!
+  workspaceChanges(after: Float, first: Int): WorkspaceChangeConnection!
+}
+
+type Mutation {
+  issueCreate(input: IssueCreateInput!): IssuePayload!
+  issueUpdate(input: IssueUpdateInput!): IssuePayload!
+  issueArchive(input: IssueArchiveInput!): IssuePayload!
+  issueBatchUpdate(input: IssueBatchUpdateInput!): IssueBatchPayload!
+  commentCreate(input: CommentCreateInput!): CommentPayload!
+  projectCreate(input: ProjectCreateInput!): ProjectPayload!
+  projectUpdate(input: ProjectUpdateInput!): ProjectPayload!
+}
+
+type Viewer {
+  id: ID!
+  user: User!
+  workspace: Workspace!
+}
+
+type Workspace {
+  id: ID!
+  name: String!
+  urlKey: String!
+  changeSequence: Float!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  initials: String!
+}
+
+type Team {
+  id: ID!
+  workspaceId: ID!
+  key: String!
+  name: String!
+  issueCounter: Float!
+  private: Boolean!
+  cycleDurationWeeks: Int!
+}
+
+type WorkflowState {
+  id: ID!
+  workspaceId: ID!
+  teamId: ID!
+  name: String!
+  type: String!
+  color: String!
+  position: Int!
+  isDefault: Boolean!
+}
+
+type Label {
+  id: ID!
+  workspaceId: ID!
+  teamId: ID!
+  name: String!
+  color: String!
+}
+
+type Issue {
+  id: ID!
+  workspaceId: ID!
+  teamId: ID!
+  number: Float!
+  identifier: String!
+  title: String!
+  description: String!
+  priority: Int!
+  stateId: ID!
+  assigneeId: ID
+  projectId: ID
+  cycleId: ID
+  milestoneId: ID
+  parentId: ID
+  dueAt: Float
+  labelIds: [ID!]!
+  subscriberIds: [ID!]!
+  relatedIssueIds: [ID!]!
+  blockedByIds: [ID!]!
+  duplicateOfId: ID
+  archivedAt: Float
+  sortOrder: Float!
+  revision: Float!
+  lastMutationId: String
+  createdAt: Float!
+  updatedAt: Float!
+}
+
+type IssueConnection {
+  nodes: [Issue!]!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type Project {
+  id: ID!
+  workspaceId: ID!
+  teamId: ID!
+  name: String!
+  description: String!
+  summary: String!
+  status: String!
+  health: String!
+  area: String!
+  leadId: ID
+  startAt: Float
+  targetAt: Float
+  teamIds: [ID!]!
+  memberIds: [ID!]!
+  createdAt: Float!
+  updatedAt: Float!
+}
+
+type Cycle {
+  id: ID!
+  workspaceId: ID!
+  teamId: ID!
+  number: Int!
+  startsAt: Float!
+  endsAt: Float!
+  completedAt: Float
+  createdAt: Float!
+  updatedAt: Float!
+}
+
+type Milestone {
+  id: ID!
+  workspaceId: ID!
+  projectId: ID!
+  name: String!
+  targetAt: Float
+  sortOrder: Float!
+}
+
+type Initiative {
+  id: ID!
+  workspaceId: ID!
+  name: String!
+  description: String!
+  ownerId: ID
+  leadTeamId: ID
+  status: String!
+  priority: Int!
+  targetAt: Float
+  projectIds: [ID!]!
+  createdAt: Float!
+  updatedAt: Float!
+}
+
+type Comment {
+  id: ID!
+  workspaceId: ID!
+  issueId: ID!
+  authorId: ID!
+  body: String!
+  createdAt: Float!
+  updatedAt: Float!
+}
+
+type SearchResult {
+  issues: [Issue!]!
+  projects: [Project!]!
+  documents: [Document!]!
+}
+
+type Document {
+  id: ID!
+  workspaceId: ID!
+  projectId: ID
+  title: String!
+  body: String!
+}
+
+type BootstrapPayload {
+  lastSyncId: Float!
+  workspace: Workspace!
+  currentUser: User!
+  teams: [Team!]!
+  users: [User!]!
+  states: [WorkflowState!]!
+  labels: [Label!]!
+  projects: [Project!]!
+  cycles: [Cycle!]!
+  milestones: [Milestone!]!
+  issues: [Issue!]!
+  comments: [Comment!]!
+  initiatives: [Initiative!]!
+}
+
+type WorkspaceChange {
+  workspaceId: ID!
+  sequence: Float!
+  entityType: String!
+  entityId: ID!
+  operation: String!
+  revision: Float!
+  changedFields: [String!]!
+  payload: JSON
+  syncGroup: String
+  authorizationTeamId: ID
+  actorId: ID
+  clientMutationId: String
+  createdAt: Float!
+}
+
+type WorkspaceChangeConnection {
+  nodes: [WorkspaceChange!]!
+  pageInfo: PageInfo!
+  checkpoint: Float!
+}
+
+type IssuePayload {
+  success: Boolean!
+  clientMutationId: ID!
+  issue: Issue
+  lastSyncId: Float
+  revision: Float
+  error: String
+}
+
+type IssueBatchPayload {
+  success: Boolean!
+  clientMutationId: ID!
+  issues: [Issue!]!
+  lastSyncId: Float
+  error: String
+}
+
+type CommentPayload {
+  success: Boolean!
+  clientMutationId: ID!
+  comment: Comment
+  lastSyncId: Float
+  error: String
+}
+
+type ProjectPayload {
+  success: Boolean!
+  clientMutationId: ID!
+  project: Project
+  lastSyncId: Float
+  error: String
+}
+
+input IssueFilter {
+  teamId: ID
+  stateId: ID
+  assigneeId: ID
+  projectId: ID
+  cycleId: ID
+  query: String
+  includeArchived: Boolean
+}
+
+input IssueCreateInput {
+  clientMutationId: ID!
+  id: ID
+  teamId: ID!
+  title: String!
+  description: String
+  priority: Int
+  stateId: ID
+  assigneeId: ID
+  projectId: ID
+  cycleId: ID
+  milestoneId: ID
+  parentId: ID
+  dueAt: Float
+  sortOrder: Float
+  number: Float
+  identifier: String
+  labelIds: [ID!]
+  subscriberIds: [ID!]
+}
+
+input IssueUpdateInput {
+  clientMutationId: ID!
+  id: ID!
+  expectedRevision: Float
+  title: String
+  description: String
+  priority: Int
+  stateId: ID
+  assigneeId: ID
+  projectId: ID
+  cycleId: ID
+  milestoneId: ID
+  parentId: ID
+  dueAt: Float
+  sortOrder: Float
+  teamId: ID
+  labelIds: [ID!]
+  subscriberIds: [ID!]
+  relatedIssueIds: [ID!]
+  blockedByIds: [ID!]
+  duplicateOfId: ID
+}
+
+input IssueArchiveInput {
+  clientMutationId: ID!
+  id: ID!
+  expectedRevision: Float
+}
+
+input IssuePatchInput {
+  id: ID!
+  expectedRevision: Float
+  title: String
+  description: String
+  priority: Int
+  stateId: ID
+  assigneeId: ID
+  projectId: ID
+  cycleId: ID
+  milestoneId: ID
+  parentId: ID
+  dueAt: Float
+  sortOrder: Float
+  teamId: ID
+  labelIds: [ID!]
+  archived: Boolean
+}
+
+input IssueBatchUpdateInput {
+  clientMutationId: ID!
+  patches: [IssuePatchInput!]!
+}
+
+input CommentCreateInput {
+  clientMutationId: ID!
+  id: ID
+  issueId: ID!
+  body: String!
+}
+
+input ProjectCreateInput {
+  clientMutationId: ID!
+  id: ID
+  teamId: ID!
+  name: String!
+  description: String
+  summary: String
+  status: String
+  health: String
+  area: String
+  leadId: ID
+  startAt: Float
+  targetAt: Float
+  teamIds: [ID!]
+}
+
+input ProjectUpdateInput {
+  clientMutationId: ID!
+  id: ID!
+  name: String
+  description: String
+  summary: String
+  status: String
+  health: String
+  area: String
+  leadId: ID
+  startAt: Float
+  targetAt: Float
+  teamIds: [ID!]
+}

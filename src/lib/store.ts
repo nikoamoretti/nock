@@ -12,7 +12,7 @@ import { cloneIssue, normalizeIssue, pickInverse } from './issue-model'
 import { MemoryPersistence, type Persistence } from './persist'
 import { createWorkspaceSnapshot } from './seed-roadmap'
 import { IDS } from './seed'
-import { ImmediateAckBackend, SyncEngine, type SyncBackend } from './sync'
+import { ImmediateAckBackend, SyncEngine, tryGraphqlBackend, type SyncBackend } from './sync'
 import type {
   BoardDrag,
   CollectionRestore,
@@ -155,11 +155,13 @@ export class NockStore {
     return store
   }
 
-  static async open(persist: Persistence): Promise<NockStore> {
+  static async open(persist: Persistence, options: StoreOptions = {}): Promise<NockStore> {
     const loaded = await persist.load()
     const snapshot = loaded ?? createWorkspaceSnapshot()
     const online = typeof navigator === 'undefined' ? true : navigator.onLine
-    const store = NockStore.from(snapshot, persist, { online })
+    const backend =
+      options.backend ?? (await tryGraphqlBackend()) ?? new ImmediateAckBackend()
+    const store = NockStore.from(snapshot, persist, { ...options, backend, online })
     store.listenToNetwork()
     if (!loaded) {
       store.queuePersist()

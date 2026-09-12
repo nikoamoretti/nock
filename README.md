@@ -30,8 +30,26 @@ That builds a Tauri app, copies it to `~/Applications/Nock.app`, and does not ne
 - `T` status · `A` assignee · `P` priority
 - `G` then `I` / `M` / `A` / `B` / `P` / `C` to jump views
 
+## GraphQL + Postgres
+
+Local durability still lives in IndexedDB. The API is a small GraphQL server over embedded Postgres (PGlite) so mutations can be authorized, validated, and written with `clientMutationId` receipts.
+
+```bash
+npm run api          # http://127.0.0.1:8787/graphql
+npm run dev:sync     # API + Vite 5173
+```
+
+Set `VITE_GRAPHQL_URL=http://127.0.0.1:8787/graphql` if you want the SPA to submit through GraphQL instead of the in-process ack backend. Online success still has no spinner — the UI updates from the object pool first.
+
+Schema/migrations live in `server/sql/`. Optional real Postgres:
+
+```bash
+docker compose up -d
+```
+
 ## Test
 
 ```bash
 npm test
+npx tsc -b && npx oxlint src server
 ```

@@ -1,4 +1,5 @@
 export type { SyncBackend } from './backend'
 export { ImmediateAckBackend, ScriptedBackend } from './backend'
 export { SyncEngine } from './engine'
+export { GraphQLSyncBackend, tryGraphqlBackend } from './graphql-backend'
 export type { RemoteEvent, SyncHost, SyncSubmitResult, WireCommand } from './types'

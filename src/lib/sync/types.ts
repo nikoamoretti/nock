@@ -17,6 +17,7 @@ export type WireCommand = {
   issueId: string
   patch?: IssuePatch
   snapshot?: Issue
+  expectedRevision?: number
 }
 
 export type SyncSubmitResult =

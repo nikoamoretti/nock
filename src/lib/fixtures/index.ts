@@ -1,0 +1,42 @@
+import { IDS } from '../seed'
+
+/** Canonical workspace fixture IDs. Tests and GraphQL seed share these. */
+export const FIXTURE_IDS = IDS
+
+export const FIXTURE_TABLES = [
+  'workspaces',
+  'users',
+  'memberships',
+  'teams',
+  'team_memberships',
+  'workflow_states',
+  'issues',
+  'labels',
+  'issue_labels',
+  'issue_relations',
+  'issue_subscribers',
+  'cycles',
+  'projects',
+  'project_teams',
+  'project_members',
+  'milestones',
+  'initiatives',
+  'initiative_projects',
+  'documents',
+  'comments',
+  'attachments',
+  'activity_events',
+  'project_updates',
+  'customers',
+  'customer_requests',
+  'notifications',
+  'saved_views',
+  'favorites',
+  'integration_installations',
+  'external_links',
+  'webhook_subscriptions',
+  'webhook_deliveries',
+  'workspace_changes',
+  'mutation_receipts',
+  'outbox_events',
+] as const

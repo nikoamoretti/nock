@@ -196,6 +196,7 @@ export class SyncEngine {
         issueId: next.issueId,
         patch: next.patch,
         snapshot: next.snapshot,
+        expectedRevision: next.baseRevision,
       }
       try {
         const result = await this.backend.submit(wire)
