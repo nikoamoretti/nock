@@ -2,7 +2,7 @@ import type { IssuePatch } from '../commands'
 import { patchFieldKeys } from '../issue-model'
 import type { Issue, MutationStatus, QueuedCommand } from '../types'
 import { ImmediateAckBackend, type SyncBackend } from './backend'
-import type { RemoteEvent, SyncHost, SyncSubmitResult, WireCommand } from './types'
+import type { ConnectionState, RemoteEvent, SyncHost, SyncSubmitResult, WireCommand } from './types'
 
 export class SyncEngine {
   store: SyncHost
@@ -11,6 +11,7 @@ export class SyncEngine {
   queue: QueuedCommand[] = []
   seenMutationIds = new Set<string>()
   showsSpinner = false
+  connection: ConnectionState = 'offline'
   private pumpChain: Promise<void> = Promise.resolve()
 
   constructor(store: SyncHost, backend: SyncBackend = new ImmediateAckBackend()) {
@@ -96,6 +97,7 @@ export class SyncEngine {
   }
 
   applyRemote(event: RemoteEvent): 'applied' | 'duplicate' | 'conflict' {
+    const syncPoint = event.sequence ?? event.revision
     if (this.seenMutationIds.has(event.mutationId)) return 'duplicate'
     const own = this.command(event.mutationId)
     if (own) {
@@ -110,7 +112,7 @@ export class SyncEngine {
           lastMutationId: event.mutationId,
         })
       }
-      this.store.lastSyncId = Math.max(this.store.lastSyncId, event.revision)
+      this.store.lastSyncId = Math.max(this.store.lastSyncId, syncPoint)
       this.store.queuePersist()
       this.store.bump()
       return 'applied'
@@ -130,7 +132,7 @@ export class SyncEngine {
       if (this.store.issue(event.issueId)) {
         this.store.removeEntity(event.issueId)
       }
-      this.store.lastSyncId = Math.max(this.store.lastSyncId, event.revision)
+      this.store.lastSyncId = Math.max(this.store.lastSyncId, syncPoint)
       this.store.queuePersist()
       this.store.bump()
       return pending.length ? 'conflict' : 'applied'
@@ -151,7 +153,7 @@ export class SyncEngine {
         syncId: event.revision,
         lastMutationId: event.mutationId,
       })
-      this.store.lastSyncId = Math.max(this.store.lastSyncId, event.revision)
+      this.store.lastSyncId = Math.max(this.store.lastSyncId, syncPoint)
       this.store.queuePersist()
       this.store.bump()
       return 'applied'
@@ -177,7 +179,7 @@ export class SyncEngine {
     next.syncId = next.revision
     next.lastMutationId = event.mutationId
     this.store.writeEntity(next)
-    this.store.lastSyncId = Math.max(this.store.lastSyncId, event.revision)
+    this.store.lastSyncId = Math.max(this.store.lastSyncId, syncPoint)
     this.store.queuePersist()
     this.store.bump()
     return conflict ? 'conflict' : 'applied'
@@ -222,17 +224,23 @@ export class SyncEngine {
       return
     }
     command.status = 'acknowledged'
-    const revision = Math.max(result.revision, this.store.lastSyncId + 1)
+    const issueRevision =
+      result.lastSyncId != null
+        ? result.revision
+        : Math.max(result.revision, this.store.lastSyncId + 1)
     const issue = this.store.issue(command.issueId)
     if (issue) {
       this.store.writeEntity({
         ...issue,
-        revision,
-        syncId: revision,
+        revision: issueRevision,
+        syncId: issueRevision,
         lastMutationId: command.clientMutationId,
       })
     }
-    this.store.lastSyncId = Math.max(this.store.lastSyncId, revision)
+    this.store.lastSyncId = Math.max(
+      this.store.lastSyncId,
+      result.lastSyncId ?? issueRevision,
+    )
     this.store.queuePersist()
     this.store.bump()
   }

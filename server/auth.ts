@@ -1,9 +1,11 @@
 import type { Database } from './db.ts'
+import type { LiveHub } from './live.ts'
 
 export type AuthContext = {
   db: Database
   userId: string
   workspaceId: string
+  hub?: LiveHub
 }
 
 export class DomainError extends Error {

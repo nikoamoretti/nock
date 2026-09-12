@@ -21,14 +21,17 @@ export type WireCommand = {
 }
 
 export type SyncSubmitResult =
-  | { ok: true; clientMutationId: string; revision: number }
+  | { ok: true; clientMutationId: string; revision: number; lastSyncId?: number }
   | { ok: false; clientMutationId: string; error: string }
 
 export type RemoteEvent = {
   mutationId: string
   revision: number
+  sequence?: number
   issueId: string
   patch?: IssuePatch
   issue?: Issue
   deleted?: boolean
 }
+
+export type ConnectionState = 'offline' | 'connecting' | 'live' | 'reconnecting'

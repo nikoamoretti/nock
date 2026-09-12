@@ -147,3 +147,27 @@ export const SEARCH = `
     }
   }
 `
+
+export const WORKSPACE_CHANGES = `
+  query WorkspaceChanges($after: Float, $first: Int) {
+    workspaceChanges(after: $after, first: $first) {
+      checkpoint
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        workspaceId
+        sequence
+        entityType
+        entityId
+        operation
+        revision
+        changedFields
+        payload
+        syncGroup
+        authorizationTeamId
+        actorId
+        clientMutationId
+        createdAt
+      }
+    }
+  }
+`

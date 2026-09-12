@@ -1,3 +1,4 @@
+import { LiveHub } from './live.ts'
 import { openDatabase, type Database } from './db.ts'
 import { seedPrivateTeam, seedWorkspace } from './fixtures.ts'
 import { migrate } from './migrate.ts'
@@ -12,9 +13,11 @@ export async function createTestDb(): Promise<Database> {
 
 export async function createSeededTestApp(options?: { demo?: boolean }) {
   const db = await createTestDb()
+  const hub = new LiveHub()
   const ctx = await seedWorkspace(db, { demo: options?.demo ?? true })
-  const yoga = await createNockYoga(db)
-  return { db, ctx, yoga }
+  ctx.hub = hub
+  const yoga = await createNockYoga(db, hub)
+  return { db, ctx, yoga, hub }
 }
 
 export async function graphqlRequest<T>(

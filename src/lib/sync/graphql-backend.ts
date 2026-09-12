@@ -1,10 +1,5 @@
 import type { SyncBackend } from './backend'
-import {
-  ISSUE_ARCHIVE,
-  ISSUE_CREATE,
-  ISSUE_UPDATE,
-  VIEWER,
-} from '../graphql/operations'
+import { ISSUE_ARCHIVE, ISSUE_CREATE, ISSUE_UPDATE, VIEWER, WORKSPACE_CHANGES } from '../graphql/operations'
 import type { Issue } from '../types'
 import type { SyncSubmitResult, WireCommand } from './types'
 
@@ -161,6 +156,27 @@ export class GraphQLSyncBackend implements SyncBackend {
       ok: true,
       clientMutationId: payload.clientMutationId,
       revision: payload.revision ?? 0,
+      lastSyncId: payload.lastSyncId ?? payload.revision ?? 0,
+    }
+  }
+
+  async fetchDelta(after: number, first = 500): Promise<{
+    nodes: Array<Record<string, unknown>>
+    hasNextPage: boolean
+    checkpoint: number
+  }> {
+    const result = await this.request<{
+      workspaceChanges: {
+        nodes: Array<Record<string, unknown>>
+        pageInfo: { hasNextPage: boolean }
+        checkpoint: number
+      }
+    }>(WORKSPACE_CHANGES, { after, first })
+    const page = result.data?.workspaceChanges
+    return {
+      nodes: page?.nodes ?? [],
+      hasNextPage: Boolean(page?.pageInfo.hasNextPage),
+      checkpoint: page?.checkpoint ?? after,
     }
   }
 }
@@ -198,14 +214,14 @@ export function issueFromGraphql(node: IssueNode): Issue {
 export async function tryGraphqlBackend(
   options?: Partial<GraphqlClientOptions>,
 ): Promise<GraphQLSyncBackend | null> {
+  const env = (import.meta as ImportMeta & { env?: { VITE_GRAPHQL_URL?: string; DEV?: boolean } }).env
   const url =
     options?.url ??
-    (typeof import.meta !== 'undefined' &&
-    import.meta.env &&
-    typeof import.meta.env.VITE_GRAPHQL_URL === 'string' &&
-    import.meta.env.VITE_GRAPHQL_URL
-      ? import.meta.env.VITE_GRAPHQL_URL
-      : '')
+    (typeof env?.VITE_GRAPHQL_URL === 'string' && env.VITE_GRAPHQL_URL
+      ? env.VITE_GRAPHQL_URL
+      : env?.DEV
+        ? '/graphql'
+        : '')
   if (!url) return null
   const backend = new GraphQLSyncBackend({
     url,

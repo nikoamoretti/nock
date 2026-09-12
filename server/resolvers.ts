@@ -10,11 +10,11 @@ import {
   projectCreate,
   projectUpdate,
 } from './domain.ts'
+import { fetchWorkspaceChanges } from './live.ts'
 import {
   attachManyIssueJoins,
   loadIssue,
   loadProject,
-  mapChange,
   mapComment,
   mapIssueRow,
   type IssueRecord,
@@ -354,37 +354,20 @@ export const resolvers = {
       args: { after?: number | null; first?: number | null },
       ctx: GqlContext,
     ) => {
-      const after = args.after ?? 0
-      const limit = Math.min(Math.max(args.first ?? 200, 1), 1000)
-      const result = await ctx.db.query(
-        `SELECT c.*
-         FROM workspace_changes c
-         WHERE c.workspace_id = $1
-           AND c.sequence > $2
-           AND (
-             c.authorization_team_id IS NULL OR
-             EXISTS (
-               SELECT 1 FROM teams t
-               WHERE t.id = c.authorization_team_id AND t.private = false
-             ) OR
-             EXISTS (
-               SELECT 1 FROM team_memberships m
-               WHERE m.team_id = c.authorization_team_id AND m.user_id = $3
-             )
-           )
-         ORDER BY c.sequence
-         LIMIT $4`,
-        [ctx.workspaceId, after, ctx.userId, limit + 1],
+      const page = await fetchWorkspaceChanges(
+        ctx.db,
+        ctx.workspaceId,
+        ctx.userId,
+        args.after ?? 0,
+        args.first ?? 200,
       )
-      const nodes = result.rows.slice(0, limit).map((row) => mapChange(row))
-      const last = nodes[nodes.length - 1]?.sequence ?? after
       return {
-        nodes,
+        nodes: page.nodes,
         pageInfo: {
-          hasNextPage: result.rows.length > limit,
-          endCursor: String(last),
+          hasNextPage: page.hasNextPage,
+          endCursor: String(page.checkpoint),
         },
-        checkpoint: last,
+        checkpoint: page.checkpoint,
       }
     },
   },

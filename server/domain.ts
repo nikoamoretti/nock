@@ -1,5 +1,6 @@
 import { assertTeamAccess, assertWorkspaceMember, DomainError, newId, type AuthContext } from './auth.ts'
 import { asNumber, jsonParam, type Database } from './db.ts'
+import { publishSequence } from './live.ts'
 import {
   loadIssue,
   loadProject,
@@ -55,6 +56,14 @@ export type IssueUpdateInput = {
 }
 
 type ReceiptRow = { payload: unknown; revision: unknown }
+
+async function finish<T extends { success: boolean; lastSyncId: number | null }>(
+  ctx: AuthContext,
+  result: T,
+): Promise<T> {
+  if (result.success) await publishSequence(ctx, result.lastSyncId)
+  return result
+}
 
 async function readReceipt<T>(
   db: Database,
@@ -348,7 +357,7 @@ export async function issueCreate(
       await writeReceipt(db, inner, input.clientMutationId, 'issue', id, issue.revision, result)
       return result
     })
-    return payload
+    return finish(ctx, payload)
   } catch (error) {
     return fail(input.clientMutationId, error instanceof Error ? error.message : String(error))
   }
@@ -520,7 +529,7 @@ export async function issueUpdate(
       await writeReceipt(db, inner, input.clientMutationId, 'issue', issue.id, revision, result)
       return result
     })
-    return payload
+    return finish(ctx, payload)
   } catch (error) {
     return fail(input.clientMutationId, error instanceof Error ? error.message : String(error))
   }
@@ -591,7 +600,7 @@ export async function issueBatchUpdate(
     lastSyncId ?? 0,
     payload,
   )
-  return payload
+  return finish(ctx, payload)
 }
 
 export type CommentPayload = {
@@ -624,7 +633,7 @@ export async function commentCreate(
         error: 'comment is required',
       }
     }
-    return ctx.db.transaction(async (db) => {
+    return finish(ctx, await ctx.db.transaction(async (db) => {
       const inner = { ...ctx, db }
       const issue = await loadIssue(db, ctx.workspaceId, input.issueId)
       if (!issue) {
@@ -678,7 +687,7 @@ export async function commentCreate(
       }
       await writeReceipt(db, inner, input.clientMutationId, 'comment', id, 1, result)
       return result
-    })
+    }))
   } catch (error) {
     return {
       success: false,
@@ -735,7 +744,7 @@ export async function projectCreate(
         error: 'name is required',
       }
     }
-    return ctx.db.transaction(async (db) => {
+    return finish(ctx, await ctx.db.transaction(async (db) => {
       const inner = { ...ctx, db }
       const id = input.id?.trim() || newId('project')
       const now = Date.now()
@@ -787,7 +796,7 @@ export async function projectCreate(
       }
       await writeReceipt(db, inner, input.clientMutationId, 'project', id, 1, result)
       return result
-    })
+    }))
   } catch (error) {
     return {
       success: false,
@@ -824,7 +833,7 @@ export async function projectUpdate(
       input.clientMutationId,
     )
     if (existing) return existing
-    return ctx.db.transaction(async (db) => {
+    return finish(ctx, await ctx.db.transaction(async (db) => {
       const inner = { ...ctx, db }
       const current = await loadProject(db, ctx.workspaceId, input.id)
       if (!current) {
@@ -894,7 +903,7 @@ export async function projectUpdate(
       }
       await writeReceipt(db, inner, input.clientMutationId, 'project', current.id, 1, result)
       return result
-    })
+    }))
   } catch (error) {
     return {
       success: false,

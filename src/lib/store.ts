@@ -13,6 +13,8 @@ import { MemoryPersistence, type Persistence } from './persist'
 import { createWorkspaceSnapshot } from './seed-roadmap'
 import { IDS } from './seed'
 import { ImmediateAckBackend, SyncEngine, tryGraphqlBackend, type SyncBackend } from './sync'
+import { GraphQLSyncBackend } from './sync/graphql-backend'
+import { attachGraphqlRealtime, type RealtimeClient } from './sync/realtime'
 import type {
   BoardDrag,
   CollectionRestore,
@@ -131,6 +133,7 @@ export class NockStore {
   ui!: UiState
   commands: CommandSystem
   sync: SyncEngine
+  realtime: RealtimeClient | null = null
 
   persistError: string | null = null
   private listeners = new Set<() => void>()
@@ -163,6 +166,10 @@ export class NockStore {
       options.backend ?? (await tryGraphqlBackend()) ?? new ImmediateAckBackend()
     const store = NockStore.from(snapshot, persist, { ...options, backend, online })
     store.listenToNetwork()
+    if (backend instanceof GraphQLSyncBackend) {
+      store.realtime = attachGraphqlRealtime(store, backend)
+      void store.realtime.connect()
+    }
     if (!loaded) {
       store.queuePersist()
       await store.flush()
@@ -323,9 +330,11 @@ export class NockStore {
     }
     window.addEventListener('online', () => {
       this.sync.setOnline(true)
+      void this.realtime?.connect()
     })
     window.addEventListener('offline', () => {
       this.sync.setOnline(false)
+      this.realtime?.pause()
     })
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.sync.setOnline(false)
