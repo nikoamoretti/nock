@@ -84,6 +84,9 @@ export function mergePersistedSnapshot(
     customerRequests: snapshot.customerRequests ?? [],
     snoozes: snapshot.snoozes ?? {},
     inboxDelivery: snapshot.inboxDelivery,
+    installations: snapshot.installations ?? [],
+    externalLinks: snapshot.externalLinks ?? [],
+    externalIdentities: snapshot.externalIdentities ?? [],
     pendingCommands: commands?.pending ?? snapshot.pendingCommands ?? [],
     seenMutationIds: commands?.seen ?? snapshot.seenMutationIds ?? [],
   }

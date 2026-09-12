@@ -268,6 +268,42 @@ export async function seedWorkspace(
     )
   }
 
+  await db.query(
+    `INSERT INTO integration_installations (
+       id, workspace_id, provider, external_id, status, config, created_at, updated_at
+     ) VALUES ($1,$2,'github','1','active',$3::jsonb,$4,$4)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      'inst_github',
+      workspaceId,
+      JSON.stringify({
+        secret: 'nock-dev-secret',
+        repos: [{ name: 'acme/nock' }],
+      }),
+      now,
+    ],
+  )
+  await db.query(
+    `INSERT INTO webhook_subscriptions (
+       id, workspace_id, url, secret, disabled_at, fail_count, created_at, updated_at
+     ) VALUES ($1,$2,$3,$4,NULL,0,$5,$5)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      'wh_local',
+      workspaceId,
+      'https://example.test/hooks/nock',
+      'nock-hook-secret',
+      now,
+    ],
+  )
+  await db.query(
+    `INSERT INTO external_identities (
+       id, workspace_id, installation_id, provider, external_user_id, user_id, created_at
+     ) VALUES ($1,$2,'inst_github','github','gh_user_1',$3,$4)
+     ON CONFLICT (id) DO NOTHING`,
+    ['ident_github_me', workspaceId, snapshot.currentUserId, now],
+  )
+
   return {
     db,
     userId: snapshot.currentUserId,

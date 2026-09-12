@@ -17,6 +17,7 @@ export default defineConfig({
     proxy: {
       '/graphql': { target: 'http://127.0.0.1:8787', changeOrigin: true },
       '/sync': { target: 'http://127.0.0.1:8787', ws: true, changeOrigin: true },
+      '/integrations': { target: 'http://127.0.0.1:8787', changeOrigin: true },
     },
   },
   test: {

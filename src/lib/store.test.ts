@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MemoryPersistence, type Persistence } from './persist'
 import { createBootstrapSnapshot, IDS } from './seed'
+import { githubCommands } from './integrations'
 import { NockStore } from './store'
 import { ImmediateAckBackend } from './sync/backend'
 import type { Snapshot } from './types'
@@ -392,6 +393,27 @@ describe('NockStore', () => {
     expect(store.inboxNotifications('priority').map((row) => row.id)).not.toContain(priority[0]!.id)
     store.setDeliveryPreference('mention', false)
     expect(store.inboxDelivery.mention).toBe(false)
+  })
+
+  it('applies GitHub integration commands onto ExternalLink, not Issue columns', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: true }))
+    const issue = store.issueByIdentifier('ENG-1')
+    expect(issue).toBeTruthy()
+    expect('githubPrUrl' in (issue ?? {})).toBe(false)
+    store.applyIntegrationCommands(
+      githubCommands('pull_request', {
+        action: 'opened',
+        pull_request: {
+          number: 3,
+          title: 'ENG-1 from PR',
+          html_url: 'https://github.com/acme/nock/pull/3',
+          merged: false,
+          head: { ref: 'eng-1-pr' },
+        },
+      }),
+    )
+    expect(store.externalLinksForIssue(issue!.id).some((row) => row.url.includes('/pull/3'))).toBe(true)
+    expect(store.installations.get('inst_github')?.provider).toBe('github')
   })
 })
 

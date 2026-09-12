@@ -8,6 +8,12 @@ import { CommandSystem } from './command-system'
 import { astFromFilters } from './filter-ast'
 import { splitInbox, markAllRead, defaultDeliveryPreferences, type DeliveryPreferences, type InboxNotification } from './inbox'
 import {
+  type ExternalIdentity,
+  type ExternalLink,
+  type IntegrationCommand,
+  type IntegrationInstallation,
+} from './integrations'
+import {
   classifyCycles,
   normalizeCycle,
   normalizeMilestone,
@@ -157,6 +163,9 @@ export class NockStore {
   snoozes = new Map<string, number>()
   triageRules: TriageRule[] = []
   inboxDelivery: DeliveryPreferences = defaultDeliveryPreferences()
+  installations = new Map<string, IntegrationInstallation>()
+  externalLinks = new Map<string, ExternalLink>()
+  externalIdentities = new Map<string, ExternalIdentity>()
   ui!: UiState
   commands: CommandSystem
   sync: SyncEngine
@@ -292,6 +301,15 @@ export class NockStore {
       ...defaultDeliveryPreferences(),
       ...snapshot.inboxDelivery,
     }
+    this.installations = new Map(
+      (snapshot.installations ?? []).map((row) => [row.id, { ...row, config: { ...row.config } }]),
+    )
+    this.externalLinks = new Map(
+      (snapshot.externalLinks ?? []).map((row) => [row.id, { ...row, metadata: { ...row.metadata } }]),
+    )
+    this.externalIdentities = new Map(
+      (snapshot.externalIdentities ?? []).map((row) => [row.id, { ...row }]),
+    )
     this.ui = defaultUi(snapshot)
     this.repairCounters()
     this.commands?.undo.clear()
@@ -330,6 +348,15 @@ export class NockStore {
       snoozes: Object.fromEntries(this.snoozes),
       triageRules: this.triageRules.map((rule) => structuredClone(rule)),
       inboxDelivery: { ...this.inboxDelivery },
+      installations: [...this.installations.values()].map((row) => ({
+        ...row,
+        config: { ...row.config },
+      })),
+      externalLinks: [...this.externalLinks.values()].map((row) => ({
+        ...row,
+        metadata: { ...row.metadata },
+      })),
+      externalIdentities: [...this.externalIdentities.values()].map((row) => ({ ...row })),
       pendingCommands: this.sync.pending().map((command) => ({
         ...command,
         patch: command.patch ? { ...command.patch } : undefined,
@@ -993,6 +1020,50 @@ export class NockStore {
 
   linksForIssue(issueId: string): IssueLink[] {
     return [...this.attachments.values()].filter((row) => row.issueId === issueId)
+  }
+
+  externalLinksForIssue(issueId: string): ExternalLink[] {
+    return [...this.externalLinks.values()].filter((row) => row.issueId === issueId)
+  }
+
+  applyIntegrationCommands(commands: IntegrationCommand[]): void {
+    for (const command of commands) {
+      const issue =
+        this.issueByIdentifier(command.issueIdentifier) ??
+        [...this.issues.values()].find(
+          (row) => row.identifier.toUpperCase() === command.issueIdentifier.toUpperCase(),
+        )
+      if (!issue) continue
+      if (command.type === 'external.link') {
+        const link: ExternalLink = {
+          id: crypto.randomUUID(),
+          issueId: issue.id,
+          projectId: null,
+          provider: 'github',
+          url: command.url,
+          title: command.title,
+          externalId: command.externalId,
+          metadata: { ...command.metadata },
+          createdAt: Date.now(),
+        }
+        this.externalLinks.set(link.id, link)
+      } else if (command.type === 'issue.automate') {
+        const want = command.action === 'complete' ? 'completed' : 'started'
+        const state = this.statesForTeam(issue.teamId).find((row) => row.type === want)
+        if (state) this.updateIssue(issue.id, { stateId: state.id })
+      } else {
+        const id = crypto.randomUUID()
+        this.activities.set(id, {
+          id,
+          issueId: issue.id,
+          authorId: this.currentUserId,
+          body: command.body,
+          createdAt: Date.now(),
+        })
+      }
+    }
+    this.emit()
+    this.queuePersist()
   }
 
   childIssues(parentId: string): Issue[] {

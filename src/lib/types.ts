@@ -312,6 +312,9 @@ export interface Snapshot {
   customerRequests?: import('./triage').CustomerRequest[]
   snoozes?: Record<string, number>
   inboxDelivery?: import('./inbox').DeliveryPreferences
+  installations?: import('./integrations').IntegrationInstallation[]
+  externalLinks?: import('./integrations').ExternalLink[]
+  externalIdentities?: import('./integrations').ExternalIdentity[]
   pendingCommands: QueuedCommand[]
   seenMutationIds: string[]
 }

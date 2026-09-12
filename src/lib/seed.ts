@@ -318,6 +318,20 @@ export function createBootstrapSnapshot(options?: {
     ],
     customerRequests: [],
     snoozes: {},
+    installations: [
+      {
+        id: 'inst_github',
+        workspaceId: IDS.workspace,
+        provider: 'github',
+        externalId: '1',
+        status: 'active',
+        config: { repos: [{ name: 'acme/nock' }] },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    externalLinks: [],
+    externalIdentities: [],
     pendingCommands: [],
     seenMutationIds: [],
   }

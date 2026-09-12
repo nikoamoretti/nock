@@ -297,6 +297,18 @@ export function IssueDetail({
               {row.title}
             </a>
           ))}
+          {store.externalLinksForIssue(issue.id).map((row) => (
+            <a
+              key={row.id}
+              href={row.url}
+              className="block text-[13px] text-accent underline"
+              target="_blank"
+              rel="noreferrer"
+              data-testid={`external-link-${row.provider}`}
+            >
+              {row.provider}: {row.title}
+            </a>
+          ))}
           <form
             className="mt-2 flex gap-2"
             onSubmit={(event) => {

@@ -8,6 +8,7 @@ import { seedWorkspace } from './fixtures.ts'
 import { liveHub, type LiveHub } from './live.ts'
 import { migrate } from './migrate.ts'
 import { rolloverEndedCycles } from './jobs/cycle-rollover.ts'
+import { handleIntegrationRequest } from './integrations/http.ts'
 import { attachSyncSocket } from './ws.ts'
 import { createNockYoga } from './yoga.ts'
 
@@ -39,6 +40,10 @@ export async function startApiServer(options?: {
   }
   const yoga = await createNockYoga(db, hub)
   const server = createServer((req, res) => {
+    if (req.url?.startsWith('/integrations/')) {
+      void handleIntegrationRequest(req, res, ctx)
+      return
+    }
     void yoga(req, res)
   })
   attachSyncSocket(server, db, hub)

@@ -48,10 +48,12 @@ describe('postgres schema', () => {
       `SELECT id FROM schema_migrations ORDER BY id`,
     )
     expect(applied.rows.map((row) => row.id)).toContain('002_planning')
+    expect(applied.rows.map((row) => row.id)).toContain('003_integrations')
     const tables = await db.query<{ tablename: string }>(
       `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`,
     )
     expect(tables.rows.map((row) => row.tablename)).toContain('project_relations')
+    expect(tables.rows.map((row) => row.tablename)).toContain('inbound_receipts')
     await db.close()
   })
 

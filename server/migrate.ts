@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 export const MIGRATIONS = [
   { id: '001_init', file: '001_init.sql' },
   { id: '002_planning', file: '002_planning.sql' },
+  { id: '003_integrations', file: '003_integrations.sql' },
 ] as const
 
 export async function migrate(db: Database): Promise<string[]> {
