@@ -43,6 +43,8 @@ export class CommandSystem {
       view: this.host.view,
       typing,
       navigate: this.host.navigate,
+      pathname: this.host.pathname,
+      search: this.host.search,
     })
   }
 

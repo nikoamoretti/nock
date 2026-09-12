@@ -1,10 +1,15 @@
 import { useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
+import { viewFromPath } from '../lib/view-from-path'
+import { collectionPath, issuePeekPath } from '../lib/paths'
 import { Avatar, PropertyButton } from './property-menu'
 import { PriorityIcon, StatusIcon } from './icons'
 
 export function Composer() {
   const store = useNock()
+  const navigate = useNavigate()
+  const location = useLocation()
   const titleRef = useRef<HTMLInputElement>(null)
   const draft = store.ui.composer
   const state = store.states.get(draft.stateId)
@@ -15,6 +20,25 @@ export function Composer() {
   useEffect(() => {
     titleRef.current?.focus()
   }, [])
+
+  function finishCreate(): void {
+    const created = store.submitComposer()
+    if (!created) return
+    const view = viewFromPath(location.pathname)
+    const list =
+      typeof document !== 'undefined' && typeof HTMLElement !== 'undefined'
+        ? document.querySelector('[data-testid=issue-list]')
+        : null
+    store.rememberCollection({
+      pathname: collectionPath(view),
+      search: location.search,
+      scrollTop:
+        list instanceof HTMLElement ? list.scrollTop : store.ui.listScrollTop,
+      highlightId: created.id,
+      selectedIds: [created.id],
+    })
+    navigate(issuePeekPath(view, created.identifier))
+  }
 
   if (!store.ui.composerOpen) return null
 
@@ -28,12 +52,12 @@ export function Composer() {
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault()
-          store.submitComposer()
+          finishCreate()
         }}
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
             event.preventDefault()
-            store.submitComposer()
+            finishCreate()
           }
         }}
       >
@@ -43,8 +67,9 @@ export function Composer() {
               ? `Sub-issue of ${store.issue(draft.parentId)?.identifier ?? 'issue'}`
               : 'New issue'}
           </div>
-          <input
+            <input
             ref={titleRef}
+            data-testid="composer-title"
             value={draft.title}
             onChange={(event) => store.setComposer({ title: event.target.value })}
             placeholder="Issue title"
@@ -103,6 +128,7 @@ export function Composer() {
           </div>
           <button
             type="submit"
+            data-testid="composer-create"
             disabled={!draft.title.trim()}
             className="mr-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white disabled:opacity-40"
           >

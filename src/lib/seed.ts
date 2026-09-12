@@ -224,6 +224,10 @@ export function createBootstrapSnapshot(options?: {
     ],
     issues: [],
     projectUpdates: [],
+    comments: [],
+    activities: [],
+    attachments: [],
+    savedViews: [],
     pendingCommands: [],
     seenMutationIds: [],
   }

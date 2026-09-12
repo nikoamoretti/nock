@@ -13,6 +13,7 @@ export function FilterMenu() {
     <div className="fixed inset-0 z-40" onMouseDown={() => store.toggleFilterMenu()}>
       <div
         className="absolute left-[248px] top-12 flex max-h-[min(70vh,calc(100vh-4.5rem))] w-[280px] flex-col overflow-hidden rounded-lg border border-line bg-lift shadow-2xl"
+        data-testid="filter-menu"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-3 py-2">
@@ -31,12 +32,14 @@ export function FilterMenu() {
           <Field label="Assignee">
             <Option
               active={filters.assigneeId === null}
+              testId="filter-assignee-any"
               onClick={() => store.setFilter('assigneeId', null)}
             >
               Any
             </Option>
             <Option
               active={filters.assigneeId === FILTER_UNASSIGNED}
+              testId="filter-assignee-none"
               onClick={() => store.setFilter('assigneeId', FILTER_UNASSIGNED)}
             >
               Unassigned
@@ -45,6 +48,7 @@ export function FilterMenu() {
               <Option
                 key={user.id}
                 active={filters.assigneeId === user.id}
+                testId={`filter-assignee-${user.id}`}
                 onClick={() => store.setFilter('assigneeId', user.id)}
               >
                 {user.name}
@@ -54,6 +58,7 @@ export function FilterMenu() {
           <Field label="Status">
             <Option
               active={filters.stateId === null}
+              testId="filter-status-any"
               onClick={() => store.setFilter('stateId', null)}
             >
               Any
@@ -62,6 +67,7 @@ export function FilterMenu() {
               <Option
                 key={state.id}
                 active={filters.stateId === state.id}
+                testId={`filter-status-${state.id}`}
                 onClick={() => store.setFilter('stateId', state.id)}
               >
                 {state.name}
@@ -71,6 +77,7 @@ export function FilterMenu() {
           <Field label="Priority">
             <Option
               active={filters.priority === null}
+              testId="filter-priority-any"
               onClick={() => store.setFilter('priority', null)}
             >
               Any
@@ -79,6 +86,7 @@ export function FilterMenu() {
               <Option
                 key={priority}
                 active={filters.priority === priority}
+                testId={`filter-priority-${priority}`}
                 onClick={() => store.setFilter('priority', priority)}
               >
                 {PRIORITY_LABELS[priority]}
@@ -146,14 +154,17 @@ function Option({
   active,
   onClick,
   children,
+  testId,
 }: {
   active: boolean
   onClick: () => void
   children: ReactNode
+  testId?: string
 }) {
   return (
     <button
       type="button"
+      data-testid={testId}
       className={cn(
         'rounded-md px-2 py-0.5 text-left text-[13px] text-mute hover:bg-hover hover:text-ink',
         active && 'bg-hover text-ink',

@@ -29,3 +29,9 @@ src-tauri/icons/android
 src-tauri/icons/ios
 src-tauri/icons/Square*.png
 src-tauri/icons/StoreLogo.png
+
+# Playwright
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache

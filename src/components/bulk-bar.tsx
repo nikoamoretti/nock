@@ -7,7 +7,7 @@ export function BulkBar() {
   const commands = store.commands
 
   return (
-    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-line bg-lift px-3 py-2 shadow-2xl">
+    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-line bg-lift px-3 py-2 shadow-2xl" data-testid="bulk-bar">
       <span className="pr-2 text-[12px] text-mute">{count} selected</span>
       <button
         type="button"

@@ -73,6 +73,10 @@ export function mergePersistedSnapshot(
   return {
     ...snapshot,
     issues,
+    comments: snapshot.comments ?? [],
+    activities: snapshot.activities ?? [],
+    attachments: snapshot.attachments ?? [],
+    savedViews: snapshot.savedViews ?? [],
     pendingCommands: commands?.pending ?? snapshot.pendingCommands ?? [],
     seenMutationIds: commands?.seen ?? snapshot.seenMutationIds ?? [],
   }

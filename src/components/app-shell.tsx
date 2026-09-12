@@ -19,16 +19,22 @@ export function AppShell() {
   useEffect(() => {
     store.commands.setHost({
       view,
-      navigate: (pathname) => {
-        navigate({ pathname, search: searchFromFilters(store.ui.filters) })
+      pathname: location.pathname,
+      search: location.search,
+      navigate: (to) => {
+        if (typeof to === 'number') {
+          navigate(to)
+          return
+        }
+        navigate({ pathname: to, search: searchFromFilters(store.ui.filters) })
       },
     })
-  }, [store, navigate, view])
+  }, [store, navigate, view, location.pathname, location.search])
 
   useEffect(() => store.commands.attachWindow(), [store])
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full" data-testid="workspace-ready">
       <Sidebar />
       <main className="flex min-w-0 flex-1">
         <Outlet />

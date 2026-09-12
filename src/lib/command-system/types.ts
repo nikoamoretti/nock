@@ -38,25 +38,33 @@ export type RegisteredCommand = {
 
 export type CommandHost = {
   view: ViewId
-  navigate?: (pathname: string) => void
+  pathname?: string
+  search?: string
+  navigate?: (to: string | number) => void
 }
 
 export class CommandContext {
   store: NockStore
   view: ViewId
   typing: boolean
-  navigate: ((pathname: string) => void) | undefined
+  pathname: string
+  search: string
+  navigate: ((to: string | number) => void) | undefined
 
   constructor(input: {
     store: NockStore
     view: ViewId
     typing?: boolean
-    navigate?: (pathname: string) => void
+    navigate?: (to: string | number) => void
+    pathname?: string
+    search?: string
   }) {
     this.store = input.store
     this.view = input.view
     this.typing = input.typing ?? false
     this.navigate = input.navigate
+    this.pathname = input.pathname ?? ''
+    this.search = input.search ?? ''
   }
 
   issues(): Issue[] {

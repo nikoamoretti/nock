@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/app-shell'
+import { IssueDetailPage } from './components/issue-detail'
 import { IssueView } from './components/issue-view'
 import { CyclesView, ProjectDetail, ProjectsView } from './components/plan-views'
 import { StoreProvider } from './hooks/use-nock'
@@ -54,9 +55,21 @@ function WorkspaceLayout() {
 
   return (
     <StoreProvider store={store}>
+      <NockTestHook store={store} />
       <AppShell />
     </StoreProvider>
   )
+}
+
+function NockTestHook({ store }: { store: NockStore }) {
+  useEffect(() => {
+    const host = window as unknown as { __NOCK__?: NockStore }
+    host.__NOCK__ = store
+    return () => {
+      if (host.__NOCK__ === store) delete host.__NOCK__
+    }
+  }, [store])
+  return null
 }
 
 export default function App() {
@@ -68,11 +81,18 @@ export default function App() {
           <Route element={<WorkspaceLayout />}>
             <Route path="/" element={<Navigate to="/projects" replace />} />
             <Route path="/inbox" element={<IssueView view="inbox" />} />
+            <Route path="/inbox/:identifier" element={<IssueView view="inbox" />} />
             <Route path="/my-issues" element={<IssueView view="my-issues" />} />
+            <Route path="/my-issues/:identifier" element={<IssueView view="my-issues" />} />
             <Route path="/eng/all" element={<IssueView view="all" />} />
+            <Route path="/eng/all/:identifier" element={<IssueView view="all" />} />
             <Route path="/eng/active" element={<IssueView view="active" />} />
+            <Route path="/eng/active/:identifier" element={<IssueView view="active" />} />
             <Route path="/eng/backlog" element={<IssueView view="backlog" />} />
+            <Route path="/eng/backlog/:identifier" element={<IssueView view="backlog" />} />
             <Route path="/eng/board" element={<IssueView view="board" />} />
+            <Route path="/eng/board/:identifier" element={<IssueView view="board" />} />
+            <Route path="/issues/:identifier" element={<IssueDetailPage />} />
             <Route path="/projects" element={<ProjectsView />} />
             <Route path="/projects/:projectId" element={<ProjectDetail />} />
             <Route path="/cycles" element={<CyclesView />} />

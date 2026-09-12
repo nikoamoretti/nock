@@ -25,7 +25,31 @@ export type ViewId =
 
 export type Layout = 'list' | 'board'
 
-export type GroupBy = 'status' | 'priority' | 'assignee' | 'project' | 'none'
+export type GroupBy = 'status' | 'priority' | 'assignee' | 'project' | 'cycle' | 'none'
+
+export type OrderBy = 'status' | 'priority' | 'updated' | 'created' | 'manual'
+
+export type FilterField =
+  | 'assigneeId'
+  | 'stateId'
+  | 'priority'
+  | 'projectId'
+  | 'cycleId'
+  | 'labelId'
+
+export type FilterOp = 'eq' | 'neq'
+
+export type FilterClause = {
+  field: FilterField
+  op: FilterOp
+  value: string | number | null
+}
+
+export type FilterAst =
+  | { type: 'all' }
+  | { type: 'and'; nodes: FilterAst[] }
+  | { type: 'or'; nodes: FilterAst[] }
+  | { type: 'clause'; clause: FilterClause }
 
 export type DisplayProperty =
   | 'id'
@@ -162,6 +186,42 @@ export interface Issue {
   lastMutationId: string | null
 }
 
+export interface IssueComment {
+  id: string
+  issueId: string
+  authorId: string
+  body: string
+  createdAt: number
+}
+
+export interface IssueActivity {
+  id: string
+  issueId: string
+  authorId: string
+  body: string
+  createdAt: number
+}
+
+export interface IssueLink {
+  id: string
+  issueId: string
+  url: string
+  title: string
+}
+
+export interface SavedView {
+  id: string
+  name: string
+  view: ViewId
+  layout: Layout
+  groupBy: GroupBy
+  subgroupBy: GroupBy
+  orderBy: OrderBy
+  displayProperties: DisplayProperty[]
+  filters: IssueFilters
+  ast: FilterAst
+}
+
 export type MutationStatus =
   | 'queued'
   | 'sending'
@@ -205,6 +265,10 @@ export interface Snapshot {
   milestones: Milestone[]
   issues: Issue[]
   projectUpdates: ProjectUpdate[]
+  comments: IssueComment[]
+  activities: IssueActivity[]
+  attachments: IssueLink[]
+  savedViews: SavedView[]
   pendingCommands: QueuedCommand[]
   seenMutationIds: string[]
 }
@@ -239,8 +303,17 @@ export interface UiState {
   peekOpen: boolean
   layout: Layout
   groupBy: GroupBy
+  subgroupBy: GroupBy
+  orderBy: OrderBy
   displayProperties: DisplayProperty[]
   filters: IssueFilters
+  filterAst: FilterAst
+  savedViewId: string | null
+  pickerQuery: string
+  collectionRestore: CollectionRestore | null
+  pendingListScroll: number | null
+  listScrollTop: number
+  drag: BoardDrag | null
   filterMenuOpen: boolean
   displayMenuOpen: boolean
   helpOpen: boolean
@@ -275,6 +348,21 @@ export type OverlayId =
   | 'composer'
   | 'peek'
 
+export type CollectionRestore = {
+  pathname: string
+  search: string
+  scrollTop: number
+  highlightId: string | null
+  selectedIds: string[]
+}
+
+export type BoardDrag = {
+  issueIds: string[]
+  fromStateId: string
+  overStateId: string | null
+  overIndex: number | null
+}
+
 export const EMPTY_FILTERS: IssueFilters = {
   assigneeId: null,
   stateId: null,
@@ -282,6 +370,8 @@ export const EMPTY_FILTERS: IssueFilters = {
   projectId: null,
   cycleId: null,
 }
+
+export const EMPTY_AST: FilterAst = { type: 'all' }
 
 export const STATE_TYPE_ORDER: StateType[] = [
   'triage',

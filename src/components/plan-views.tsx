@@ -3,7 +3,8 @@ import { useNock } from '../hooks/use-nock'
 import { cn, formatRange, formatShortDate } from '../lib/cn'
 import { currentCycle } from '../lib/filters'
 import { HEALTH_LABELS, type Project, type ProjectHealth } from '../lib/types'
-import { IssuePeek, IssueRow } from './issue-view'
+import { IssuePeek } from './issue-detail'
+import { IssueRow } from './issue-list'
 
 const HEALTH_TONE: Record<ProjectHealth, string> = {
   'on-track': 'text-success',
@@ -149,7 +150,7 @@ export function ProjectDetail() {
             {issues.length === 0 ? (
               <div className="px-4 py-6 text-[13px] text-mute">No issues in this project</div>
             ) : (
-              issues.map((issue) => <IssueRow key={issue.id} issue={issue} />)
+              issues.map((issue) => <IssueRow key={issue.id} issueId={issue.id} />)
             )}
           </section>
         </div>
@@ -200,7 +201,7 @@ export function CyclesView() {
               </div>
             </div>
             {issues.map((issue) => (
-              <IssueRow key={issue.id} issue={issue} />
+              <IssueRow key={issue.id} issueId={issue.id} />
             ))}
           </div>
         )}

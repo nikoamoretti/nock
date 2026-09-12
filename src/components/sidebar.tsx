@@ -54,6 +54,26 @@ export function Sidebar() {
         {TEAM_LINKS.map((link) => (
           <SideLink key={link.to} to={link.to} label={link.label} />
         ))}
+        {store.savedViews.size > 0 && (
+          <>
+            <div className="mt-4 px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-dim">
+              Saved views
+            </div>
+            {[...store.savedViews.values()].map((saved) => (
+              <button
+                key={saved.id}
+                type="button"
+                className={cn(
+                  'flex w-full items-center rounded-md px-2 py-1 text-left text-[13px] text-mute hover:bg-hover hover:text-ink',
+                  store.ui.savedViewId === saved.id && 'bg-hover text-ink',
+                )}
+                onClick={() => store.applySavedView(saved.id)}
+              >
+                {saved.name}
+              </button>
+            ))}
+          </>
+        )}
       </nav>
       <div className="border-t border-line px-3 py-3 text-[11px] leading-5 text-dim">
         <div className="text-[12px] text-mute">{store.me().name}</div>

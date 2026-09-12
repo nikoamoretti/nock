@@ -1,5 +1,6 @@
 import type { IssuePatch } from '../commands'
 import { cloneIssue, uniqueIds, withId, withoutId } from '../issue-model'
+import { collectionPath, identifierFromPath, issuePeekPath } from '../paths'
 import type { Issue, Priority, PropertyMenuKind } from '../types'
 import type { CommandSystem } from './system'
 import type { CommandArgs, CommandContext, CommandResult } from './types'
@@ -101,6 +102,23 @@ export function registerCatalog(system: CommandSystem): void {
     palette: false,
     when: () => true,
     run: (ctx) => {
+      const top = ctx.store.ui.modalStack[ctx.store.ui.modalStack.length - 1]
+      const blocking =
+        top === 'help' ||
+        top === 'display' ||
+        top === 'filter' ||
+        top === 'property' ||
+        top === 'command' ||
+        top === 'composer'
+      if (blocking) {
+        ctx.store.dismissOverlays()
+        system.restoreFocusIfQuiet()
+        return { ok: true }
+      }
+      if (identifierFromPath(ctx.pathname) && ctx.navigate) {
+        ctx.navigate(-1)
+        return { ok: true }
+      }
       ctx.store.dismissOverlays()
       system.restoreFocusIfQuiet()
       return { ok: true }
@@ -151,16 +169,32 @@ export function registerCatalog(system: CommandSystem): void {
     run: (ctx, args) => {
       const id = stringArg(args, 'id') ?? ctx.highlightedId() ?? ctx.actionIds()[0]
       if (!id) return { ok: false, error: 'no issue' }
-      if (args?.id) {
-        ctx.store.openIssuePeek(id)
-        ctx.navigate?.('/eng/all')
-        return { ok: true }
-      }
-      if (ctx.store.ui.peekOpen && ctx.store.ui.highlightedIssueId === id) {
+      const issue = ctx.store.issue(id)
+      if (!issue) return { ok: false, error: 'no issue' }
+      if (ctx.store.ui.peekOpen && ctx.store.ui.highlightedIssueId === id && !args?.id) {
+        if (identifierFromPath(ctx.pathname) && ctx.navigate) {
+          ctx.navigate(-1)
+          return { ok: true }
+        }
         ctx.store.togglePeek()
         return { ok: true }
       }
+      let scrollTop = ctx.store.ui.listScrollTop
+      if (typeof document !== 'undefined' && typeof HTMLElement !== 'undefined') {
+        const list = document.querySelector('[data-testid=issue-list]')
+        if (list instanceof HTMLElement && list.scrollTop > 0) scrollTop = list.scrollTop
+      }
+      ctx.store.rememberCollection({
+        pathname: collectionPath(ctx.view),
+        search: ctx.search,
+        scrollTop,
+        highlightId: issue.id,
+        selectedIds: [...ctx.store.ui.selectedIssueIds],
+      })
       ctx.store.openIssuePeek(id)
+      if (ctx.view !== 'projects' && ctx.view !== 'cycles') {
+        ctx.navigate?.(issuePeekPath(ctx.view, issue.identifier))
+      }
       return { ok: true }
     },
   })

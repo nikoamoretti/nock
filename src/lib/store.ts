@@ -5,6 +5,7 @@ import {
   type IssuePatch,
 } from './commands'
 import { CommandSystem } from './command-system'
+import { astFromFilters } from './filter-ast'
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
 import { cloneIssue, normalizeIssue, pickInverse } from './issue-model'
@@ -13,21 +14,28 @@ import { createWorkspaceSnapshot } from './seed-roadmap'
 import { IDS } from './seed'
 import { ImmediateAckBackend, SyncEngine, type SyncBackend } from './sync'
 import type {
+  BoardDrag,
+  CollectionRestore,
   CreateIssueInput,
   Cycle,
   DisplayProperty,
   GroupBy,
   InversePatch,
   Issue,
+  IssueActivity,
+  IssueComment,
   IssueFilters,
+  IssueLink,
   Label,
   Layout,
   Milestone,
+  OrderBy,
   OverlayId,
   Priority,
   Project,
   ProjectUpdate,
   PropertyMenuKind,
+  SavedView,
   Snapshot,
   Team,
   UiState,
@@ -37,7 +45,7 @@ import type {
   WorkflowState,
   Workspace,
 } from './types'
-import { DEFAULT_DISPLAY_PROPERTIES, EMPTY_FILTERS } from './types'
+import { DEFAULT_DISPLAY_PROPERTIES, EMPTY_AST, EMPTY_FILTERS } from './types'
 
 function defaultUi(snapshot: Snapshot): UiState {
   const team = snapshot.teams[0]
@@ -50,8 +58,17 @@ function defaultUi(snapshot: Snapshot): UiState {
     peekOpen: false,
     layout: 'list',
     groupBy: 'status',
+    subgroupBy: 'none',
+    orderBy: 'status',
     displayProperties: [...DEFAULT_DISPLAY_PROPERTIES],
     filters: { ...EMPTY_FILTERS },
+    filterAst: EMPTY_AST,
+    savedViewId: null,
+    pickerQuery: '',
+    collectionRestore: null,
+    pendingListScroll: null,
+    listScrollTop: 0,
+    drag: null,
     filterMenuOpen: false,
     displayMenuOpen: false,
     helpOpen: false,
@@ -107,6 +124,10 @@ export class NockStore {
   milestones = new Map<string, Milestone>()
   issues = new Map<string, Issue>()
   projectUpdates = new Map<string, ProjectUpdate>()
+  comments = new Map<string, IssueComment>()
+  activities = new Map<string, IssueActivity>()
+  attachments = new Map<string, IssueLink>()
+  savedViews = new Map<string, SavedView>()
   ui!: UiState
   commands: CommandSystem
   sync: SyncEngine
@@ -127,7 +148,7 @@ export class NockStore {
     persist: Persistence = new MemoryPersistence(),
     options: StoreOptions = {},
   ): NockStore {
-    const store = new NockStore(persist, options.backend)
+    const store = new NockStore(persist, options.backend ?? new ImmediateAckBackend())
     if (options.online === false) store.sync.online = false
     store.hydrate(snapshot)
     void store.sync.pump()
@@ -137,7 +158,8 @@ export class NockStore {
   static async open(persist: Persistence): Promise<NockStore> {
     const loaded = await persist.load()
     const snapshot = loaded ?? createWorkspaceSnapshot()
-    const store = NockStore.from(snapshot, persist)
+    const online = typeof navigator === 'undefined' ? true : navigator.onLine
+    const store = NockStore.from(snapshot, persist, { online })
     store.listenToNetwork()
     if (!loaded) {
       store.queuePersist()
@@ -205,6 +227,18 @@ export class NockStore {
     this.projectUpdates = new Map(
       (snapshot.projectUpdates ?? []).map((update) => [update.id, { ...update }]),
     )
+    this.comments = new Map(
+      (snapshot.comments ?? []).map((row) => [row.id, { ...row }]),
+    )
+    this.activities = new Map(
+      (snapshot.activities ?? []).map((row) => [row.id, { ...row }]),
+    )
+    this.attachments = new Map(
+      (snapshot.attachments ?? []).map((row) => [row.id, { ...row }]),
+    )
+    this.savedViews = new Map(
+      (snapshot.savedViews ?? []).map((row) => [row.id, structuredClone(row)]),
+    )
     this.ui = defaultUi(snapshot)
     this.repairCounters()
     this.commands?.undo.clear()
@@ -229,6 +263,10 @@ export class NockStore {
       projectUpdates: [...this.projectUpdates.values()].map((update) => ({
         ...update,
       })),
+      comments: [...this.comments.values()].map((row) => ({ ...row })),
+      activities: [...this.activities.values()].map((row) => ({ ...row })),
+      attachments: [...this.attachments.values()].map((row) => ({ ...row })),
+      savedViews: [...this.savedViews.values()].map((row) => structuredClone(row)),
       pendingCommands: this.sync.pending().map((command) => ({
         ...command,
         patch: command.patch ? { ...command.patch } : undefined,
@@ -429,8 +467,10 @@ export class NockStore {
           currentUserId: this.currentUserId,
         },
         dataView(view),
+        this.ui.orderBy,
       ),
       this.ui.filters,
+      this.ui.filterAst,
     )
     return matched.map((issue) => this.issues.get(issue.id)).filter((issue): issue is Issue => Boolean(issue))
   }
@@ -734,8 +774,162 @@ export class NockStore {
 
   setGroupBy(groupBy: GroupBy): void {
     this.ui.groupBy = groupBy
-    this.ui.displayMenuOpen = false
     this.emit()
+  }
+
+  setSubgroupBy(subgroupBy: GroupBy): void {
+    this.ui.subgroupBy = subgroupBy
+    this.emit()
+  }
+
+  setOrderBy(orderBy: OrderBy): void {
+    this.ui.orderBy = orderBy
+    this.emit()
+  }
+
+  setPickerQuery(query: string): void {
+    this.ui.pickerQuery = query
+    this.emit()
+  }
+
+  rememberCollection(restore: CollectionRestore): void {
+    this.ui.collectionRestore = restore
+  }
+
+  consumeCollectionRestore(): CollectionRestore | null {
+    const restore = this.ui.collectionRestore
+    this.ui.collectionRestore = null
+    return restore
+  }
+
+  setDrag(drag: BoardDrag | null): void {
+    this.ui.drag = drag
+    this.emit()
+  }
+
+  dropIssuesOnColumn(stateId: string, issueIds: string[], index: number | null): void {
+    const ids = issueIds.filter((id) => this.issues.has(id))
+    if (ids.length === 0) return
+    const remaining = [...this.issues.values()]
+      .filter((issue) => issue.stateId === stateId && !ids.includes(issue.id))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const insertAt = Math.max(0, Math.min(index ?? remaining.length, remaining.length))
+    const ordered = [
+      ...remaining.slice(0, insertAt),
+      ...ids.map((id) => this.issues.get(id)!),
+      ...remaining.slice(insertAt),
+    ]
+    const dragged = new Set(ids)
+    const changed = ordered
+      .map((issue, row) => ({
+        issue,
+        patch: { stateId, sortOrder: (row + 1) * 10 },
+      }))
+      .filter(
+        (row) =>
+          row.issue.stateId !== row.patch.stateId ||
+          row.issue.sortOrder !== row.patch.sortOrder,
+      )
+      .sort((a, b) => Number(dragged.has(b.issue.id)) - Number(dragged.has(a.issue.id)))
+    for (const row of changed) {
+      this.updateIssue(row.issue.id, row.patch)
+    }
+    this.ui.drag = null
+    this.emit()
+  }
+
+  saveView(name: string, view: ViewId): SavedView {
+    const saved: SavedView = {
+      id: crypto.randomUUID(),
+      name: name.trim() || 'Untitled view',
+      view,
+      layout: this.ui.layout,
+      groupBy: this.ui.groupBy,
+      subgroupBy: this.ui.subgroupBy,
+      orderBy: this.ui.orderBy,
+      displayProperties: [...this.ui.displayProperties],
+      filters: { ...this.ui.filters },
+      ast: structuredClone(this.ui.filterAst),
+    }
+    this.savedViews.set(saved.id, saved)
+    this.ui.savedViewId = saved.id
+    this.emit()
+    this.queuePersist()
+    return saved
+  }
+
+  applySavedView(id: string): void {
+    const saved = this.savedViews.get(id)
+    if (!saved) return
+    this.ui.layout = saved.layout
+    this.ui.groupBy = saved.groupBy
+    this.ui.subgroupBy = saved.subgroupBy
+    this.ui.orderBy = saved.orderBy
+    this.ui.displayProperties = [...saved.displayProperties]
+    this.ui.filters = { ...saved.filters }
+    this.ui.filterAst = structuredClone(saved.ast)
+    this.ui.savedViewId = saved.id
+    this.emit()
+  }
+
+  addComment(issueId: string, body: string): IssueComment {
+    const text = body.trim()
+    if (!text) throw new Error('[nock] comment is required')
+    if (!this.issues.get(issueId)) throw new Error('[nock] issue not found')
+    const comment: IssueComment = {
+      id: crypto.randomUUID(),
+      issueId,
+      authorId: this.currentUserId,
+      body: text,
+      createdAt: Date.now(),
+    }
+    this.comments.set(comment.id, comment)
+    this.activities.set(comment.id, {
+      id: crypto.randomUUID(),
+      issueId,
+      authorId: this.currentUserId,
+      body: `Commented: ${text}`,
+      createdAt: comment.createdAt,
+    })
+    this.emit()
+    this.queuePersist()
+    return comment
+  }
+
+  addLink(issueId: string, url: string, title: string): IssueLink {
+    if (!this.issues.get(issueId)) throw new Error('[nock] issue not found')
+    const link: IssueLink = {
+      id: crypto.randomUUID(),
+      issueId,
+      url: url.trim(),
+      title: title.trim() || url.trim(),
+    }
+    this.attachments.set(link.id, link)
+    this.emit()
+    this.queuePersist()
+    return link
+  }
+
+  commentsForIssue(issueId: string): IssueComment[] {
+    return [...this.comments.values()]
+      .filter((row) => row.issueId === issueId)
+      .sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  activitiesForIssue(issueId: string): IssueActivity[] {
+    return [...this.activities.values()]
+      .filter((row) => row.issueId === issueId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  linksForIssue(issueId: string): IssueLink[] {
+    return [...this.attachments.values()].filter((row) => row.issueId === issueId)
+  }
+
+  childIssues(parentId: string): Issue[] {
+    return [...this.issues.values()]
+      .filter((issue) => issue.parentId === parentId && !issue.archivedAt)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
   }
 
   toggleDisplayProperty(property: DisplayProperty): void {
@@ -760,16 +954,22 @@ export class NockStore {
       return
     }
     this.ui.filters = next
+    this.ui.filterAst = astFromFilters(next)
+    this.ui.savedViewId = null
     this.emit()
   }
 
   setFilter<K extends keyof IssueFilters>(key: K, value: IssueFilters[K]): void {
     this.ui.filters = { ...this.ui.filters, [key]: value }
+    this.ui.filterAst = astFromFilters(this.ui.filters)
+    this.ui.savedViewId = null
     this.emit()
   }
 
   clearFilters(): void {
     this.ui.filters = { ...EMPTY_FILTERS }
+    this.ui.filterAst = EMPTY_AST
+    this.ui.savedViewId = null
     this.emit()
   }
 
@@ -963,6 +1163,7 @@ export class NockStore {
       this.dropModal('property')
     } else {
       this.ui.propertyMenu = kind
+      this.ui.pickerQuery = ''
       this.pushModal('property')
     }
     this.emit()

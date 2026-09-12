@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { MemoryPersistence, type Persistence } from './persist'
 import { createBootstrapSnapshot, IDS } from './seed'
 import { NockStore } from './store'
+import { ImmediateAckBackend } from './sync/backend'
 import type { Snapshot } from './types'
 
 class LatchPersistence implements Persistence {
@@ -310,6 +311,55 @@ describe('NockStore', () => {
     expect(persist.snapshot?.issues.some((row) => row.title === 'Keep me')).toBe(
       true,
     )
+  })
+
+  it('saves and reapplies a view including filter AST', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    store.setFilter('assigneeId', IDS.userMe)
+    store.setGroupBy('priority')
+    store.setSubgroupBy('assignee')
+    store.setOrderBy('updated')
+    const saved = store.saveView('Mine', 'all')
+    store.clearFilters()
+    store.setFilter('priority', 1)
+    expect(store.ui.filters.assigneeId).toBe(null)
+    store.applySavedView(saved.id)
+    expect(store.ui.filters.assigneeId).toBe(IDS.userMe)
+    expect(store.ui.groupBy).toBe('priority')
+    expect(store.ui.subgroupBy).toBe('assignee')
+    expect(store.ui.orderBy).toBe('updated')
+    expect(store.ui.savedViewId).toBe(saved.id)
+  })
+
+  it('drops a card onto another column and rolls back a rejected drop', async () => {
+    const backend = new ImmediateAckBackend()
+    const store = NockStore.from(
+      createBootstrapSnapshot({ demo: false }),
+      new MemoryPersistence(),
+      { backend },
+    )
+    const issue = store.createIssue({ title: 'Card', stateId: IDS.stateTodo })
+    await store.flushSync()
+    store.dropIssuesOnColumn(IDS.stateProgress, [issue.id], 0)
+    expect(store.issue(issue.id)?.stateId).toBe(IDS.stateProgress)
+    await store.flushSync()
+
+    const other = store.createIssue({ title: 'Rollback', stateId: IDS.stateTodo })
+    await store.flushSync()
+    backend.rejectIds.add(other.id)
+    store.dropIssuesOnColumn(IDS.stateProgress, [other.id], 0)
+    await store.flushSync()
+    expect(store.issue(other.id)?.stateId).toBe(IDS.stateTodo)
+  })
+
+  it('records comments, activity, and links on an issue', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const issue = store.createIssue({ title: 'Talk', stateId: IDS.stateTodo })
+    store.addComment(issue.id, 'Looks good')
+    store.addLink(issue.id, 'https://example.test', 'Spec')
+    expect(store.commentsForIssue(issue.id)[0]?.body).toBe('Looks good')
+    expect(store.activitiesForIssue(issue.id)[0]?.body).toContain('Commented')
+    expect(store.linksForIssue(issue.id)[0]?.url).toBe('https://example.test')
   })
 })
 
