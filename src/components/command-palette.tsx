@@ -34,6 +34,9 @@ export function CommandPalette() {
       onMouseDown={() => store.commands.run('surface.dismiss')}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
         className="nock-overlay w-[540px] overflow-hidden rounded-xl border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
       >

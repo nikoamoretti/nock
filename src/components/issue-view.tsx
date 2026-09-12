@@ -95,11 +95,13 @@ export function IssueView({ view }: { view: ViewId }) {
           <div className="flex items-center gap-2">
             <div className="text-[13px] font-medium">{TITLES[view]}</div>
             {view === 'inbox' && (
-              <div className="ml-2 flex rounded-md border border-line text-[12px] font-normal">
+              <div className="ml-2 flex rounded-md border border-line text-[12px] font-normal" role="tablist" aria-label="Inbox">
                 {(['triage', 'priority', 'other'] as const).map((pane) => (
                   <button
                     key={pane}
                     type="button"
+                    role="tab"
+                    aria-selected={store.ui.inboxPane === pane}
                     data-testid={`inbox-pane-${pane}`}
                     className={cn(
                       'px-2 py-1 capitalize',

@@ -20,6 +20,8 @@ export function IssueBoard({ issues }: { issues: Issue[] }) {
   return (
     <div
       data-testid="issue-board"
+      role="list"
+      aria-label="Board"
       className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden p-3"
     >
       {columns.map((column) => (

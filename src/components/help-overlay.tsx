@@ -10,11 +10,14 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
       onMouseDown={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="help-overlay-title"
         className="nock-overlay w-[480px] overflow-hidden rounded-xl border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <div className="text-[13px] font-medium">Keyboard shortcuts</div>
+          <div id="help-overlay-title" className="text-[13px] font-medium">Keyboard shortcuts</div>
           <button
             type="button"
             className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"

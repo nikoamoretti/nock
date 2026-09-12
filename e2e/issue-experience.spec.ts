@@ -167,4 +167,16 @@ test.describe('core issue experience', () => {
     )
     expect(persisted).toBe('Edited offline')
   })
+
+  test('list rows are 34px and board columns are 300px', async ({ page }) => {
+    await openAllIssues(page)
+    const row = page.locator('[data-testid^="issue-row-"]').first()
+    const rowBox = await row.boundingBox()
+    expect(Math.round(rowBox?.height ?? 0)).toBe(34)
+    await page.goto('/#/eng/board')
+    await page.getByTestId('workspace-ready').waitFor()
+    const column = page.locator('[data-testid^="board-column-"]').first()
+    const columnBox = await column.boundingBox()
+    expect(Math.round(columnBox?.width ?? 0)).toBe(300)
+  })
 })

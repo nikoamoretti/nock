@@ -48,6 +48,9 @@ export function Composer() {
       onMouseDown={() => store.commands.run('surface.dismiss')}
     >
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="composer-title-label"
         className="nock-overlay w-[640px] overflow-hidden rounded-xl border border-line bg-lift"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
@@ -62,7 +65,7 @@ export function Composer() {
         }}
       >
         <div className="border-b border-line px-4 py-3">
-          <div className="text-[12px] text-mute">
+          <div id="composer-title-label" className="text-[12px] text-mute">
             {draft.parentId
               ? `Sub-issue of ${store.issue(draft.parentId)?.identifier ?? 'issue'}`
               : 'New issue'}

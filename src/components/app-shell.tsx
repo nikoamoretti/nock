@@ -36,7 +36,7 @@ export function AppShell() {
   return (
     <div className="flex h-full" data-testid="workspace-ready">
       <Sidebar />
-      <main className="flex min-w-0 flex-1">
+      <main id="nock-main" aria-label="Workspace" className="flex min-w-0 flex-1">
         <Outlet />
       </main>
       <PersistBanner />

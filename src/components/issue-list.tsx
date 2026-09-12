@@ -81,6 +81,9 @@ export function IssueList({
     <div
       ref={scroller}
       data-testid="issue-list"
+      role="listbox"
+      aria-label="Issues"
+      aria-multiselectable="true"
       className="min-h-0 flex-1 overflow-auto"
       onScroll={() => {
         if (restoring.current) return
@@ -218,6 +221,9 @@ export function IssueRow({ issueId }: { issueId: string }) {
           data-testid={`issue-row-${issue.identifier}`}
           data-highlighted={highlighted || undefined}
           data-selected={selected || undefined}
+          role="option"
+          aria-selected={selected}
+          tabIndex={highlighted ? 0 : -1}
           onContextMenu={() => {
             if (!store.ui.selectedIssueIds.includes(issue.id)) {
               store.commands.run('selection.toggle', { id: issue.id, exclusive: true })
