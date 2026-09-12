@@ -5,7 +5,10 @@ import type { Database } from './db.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-export const MIGRATIONS = [{ id: '001_init', file: '001_init.sql' }] as const
+export const MIGRATIONS = [
+  { id: '001_init', file: '001_init.sql' },
+  { id: '002_planning', file: '002_planning.sql' },
+] as const
 
 export async function migrate(db: Database): Promise<string[]> {
   await db.exec(`

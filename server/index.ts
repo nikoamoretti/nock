@@ -7,6 +7,7 @@ import { openDatabase } from './db.ts'
 import { seedWorkspace } from './fixtures.ts'
 import { liveHub, type LiveHub } from './live.ts'
 import { migrate } from './migrate.ts'
+import { rolloverEndedCycles } from './jobs/cycle-rollover.ts'
 import { attachSyncSocket } from './ws.ts'
 import { createNockYoga } from './yoga.ts'
 
@@ -30,6 +31,12 @@ export async function startApiServer(options?: {
   const hub = options?.hub ?? liveHub
   const ctx = await seedWorkspace(db, { demo: options?.seedDemo ?? true })
   ctx.hub = hub
+  try {
+    const rolled = await rolloverEndedCycles(db)
+    if (rolled > 0) console.log(`[nock] rolled ${rolled} issues into a new cycle`)
+  } catch (error) {
+    console.warn('[nock] cycle rollover skipped', error)
+  }
   const yoga = await createNockYoga(db, hub)
   const server = createServer((req, res) => {
     void yoga(req, res)

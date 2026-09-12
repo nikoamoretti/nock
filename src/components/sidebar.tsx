@@ -8,6 +8,7 @@ import { NockMark } from './icons'
 
 const TEAM_LINKS = [
   { to: '/projects', label: 'Projects' },
+  { to: '/initiatives', label: 'Initiatives' },
   { to: '/eng/all', label: 'All issues' },
   { to: '/eng/active', label: 'Active' },
   { to: '/eng/backlog', label: 'Backlog' },
@@ -77,7 +78,7 @@ export function Sidebar() {
       </nav>
       <div className="border-t border-line px-3 py-3 text-[11px] leading-5 text-dim">
         <div className="text-[12px] text-mute">{store.me().name}</div>
-        <div className="mt-1">C new · Space peek · ? help · G then I T M A</div>
+        <div className="mt-1">C new · Space peek · ? help · G then I T M A P C N Y</div>
       </div>
     </aside>
   )

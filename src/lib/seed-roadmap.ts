@@ -629,9 +629,17 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
       description: [project.description, project.tech && `Stack: ${project.tech}`]
         .filter(Boolean)
         .join('\n'),
+      summary: project.progress || project.status,
       status: phaseStatus(project.phase),
       area: project.area,
       health: projectHealth(project),
+      leadId: IDS.userMe,
+      startAt: updatedAt - 14 * 86400000,
+      targetAt: updatedAt + (14 + (index % 5) * 7) * 86400000,
+      teamIds: [IDS.teamEng],
+      memberIds: [IDS.userMe],
+      blockedByIds:
+        project.id === 'phonescope' ? [projectSeedId('endpoint-ledger')] : [],
       createdAt: updatedAt - 14 * 86400000,
       updatedAt,
       syncId: 10 + index,
@@ -709,9 +717,43 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
           projectId: snapshot.projects[0].id,
           name: 'Launch',
           sortOrder: 1,
+          targetAt: snapshot.projects[0].targetAt,
         },
       ]
     : []
+  snapshot.initiatives = [
+    {
+      id: 'init_lens',
+      name: 'Lens family',
+      description: 'Shared LensKit plus the collector apps around it.',
+      ownerId: IDS.userMe,
+      leadTeamId: IDS.teamEng,
+      status: 'started',
+      priority: 2,
+      targetAt: now + 60 * 86400000,
+      projectIds: snapshot.projects
+        .filter((project) => project.area.includes('Lens') || project.name.includes('Lens'))
+        .map((project) => project.id),
+      createdAt: now - 30 * 86400000,
+      updatedAt: now,
+    },
+  ]
+  if (snapshot.initiatives[0] && snapshot.initiatives[0].projectIds.length === 0) {
+    snapshot.initiatives[0].projectIds = snapshot.projects.slice(0, 3).map((project) => project.id)
+  }
+  snapshot.documents = snapshot.projects.slice(0, 3).map((project, index) => ({
+    id: `doc_${project.id}`,
+    projectId: project.id,
+    initiativeId: null,
+    title: `${project.name} notes`,
+    body: project.description,
+    createdAt: now - (index + 1) * 86400000,
+    updatedAt: now,
+  }))
+  const currentIds = issues.filter((issue) => issue.cycleId === IDS.cycleCurrent).map((issue) => issue.id)
+  snapshot.cycles = snapshot.cycles.map((cycle) =>
+    cycle.id === IDS.cycleCurrent ? { ...cycle, scopeIssueIds: currentIds } : cycle,
+  )
   snapshot.teams[0] = {
     ...snapshot.teams[0],
     name: 'Workspace',

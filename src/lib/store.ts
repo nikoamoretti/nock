@@ -6,6 +6,13 @@ import {
 } from './commands'
 import { CommandSystem } from './command-system'
 import { astFromFilters } from './filter-ast'
+import {
+  classifyCycles,
+  normalizeCycle,
+  normalizeMilestone,
+  normalizeProject,
+  rolloverCycle,
+} from './planning'
 import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
 import { formatIdentifier } from './identifiers'
 import { cloneIssue, normalizeIssue, pickInverse } from './issue-model'
@@ -22,6 +29,7 @@ import type {
   Cycle,
   DisplayProperty,
   GroupBy,
+  Initiative,
   InversePatch,
   Issue,
   IssueActivity,
@@ -33,6 +41,7 @@ import type {
   Milestone,
   OrderBy,
   OverlayId,
+  PlanningDocument,
   Priority,
   Project,
   ProjectUpdate,
@@ -102,7 +111,7 @@ export function dataView(view: ViewId): ViewId {
 }
 
 export function layoutLockedToList(view: ViewId): boolean {
-  return view === 'inbox' || view === 'projects' || view === 'cycles'
+  return view === 'inbox' || view === 'projects' || view === 'cycles' || view === 'initiatives'
 }
 
 export type WriteOrigin = 'local' | 'remote' | 'revert'
@@ -124,6 +133,8 @@ export class NockStore {
   projects = new Map<string, Project>()
   cycles = new Map<string, Cycle>()
   milestones = new Map<string, Milestone>()
+  initiatives = new Map<string, Initiative>()
+  documents = new Map<string, PlanningDocument>()
   issues = new Map<string, Issue>()
   projectUpdates = new Map<string, ProjectUpdate>()
   comments = new Map<string, IssueComment>()
@@ -215,20 +226,25 @@ export class NockStore {
       snapshot.labels.map((label) => [label.id, { ...label }]),
     )
     this.projects = new Map(
-      snapshot.projects.map((project) => [
-        project.id,
-        {
-          ...project,
-          area: project.area ?? '',
-          health: project.health ?? 'no-update',
-        },
-      ]),
+      snapshot.projects.map((project) => [project.id, normalizeProject(project)]),
     )
     this.cycles = new Map(
-      snapshot.cycles.map((cycle) => [cycle.id, { ...cycle }]),
+      snapshot.cycles.map((cycle) => [cycle.id, normalizeCycle(cycle)]),
     )
     this.milestones = new Map(
-      (snapshot.milestones ?? []).map((milestone) => [milestone.id, { ...milestone }]),
+      (snapshot.milestones ?? []).map((milestone) => [
+        milestone.id,
+        normalizeMilestone(milestone),
+      ]),
+    )
+    this.initiatives = new Map(
+      (snapshot.initiatives ?? []).map((initiative) => [
+        initiative.id,
+        { ...initiative, projectIds: [...initiative.projectIds] },
+      ]),
+    )
+    this.documents = new Map(
+      (snapshot.documents ?? []).map((doc) => [doc.id, { ...doc }]),
     )
     this.issues = new Map(
       snapshot.issues.map((issue) => [issue.id, normalizeIssue(issue)]),
@@ -268,6 +284,11 @@ export class NockStore {
       milestones: [...this.milestones.values()].map((milestone) => ({
         ...milestone,
       })),
+      initiatives: [...this.initiatives.values()].map((initiative) => ({
+        ...initiative,
+        projectIds: [...initiative.projectIds],
+      })),
+      documents: [...this.documents.values()].map((doc) => ({ ...doc })),
       issues: [...this.issues.values()].map((issue) => cloneIssue(issue)),
       projectUpdates: [...this.projectUpdates.values()].map((update) => ({
         ...update,
@@ -1364,6 +1385,103 @@ export class NockStore {
       completed,
       ratio: issues.length === 0 ? 0 : completed / issues.length,
     }
+  }
+
+  updateProject(id: string, patch: Partial<Project>): void {
+    const project = this.projects.get(id)
+    if (!project) return
+    this.projects.set(
+      id,
+      normalizeProject({
+        ...project,
+        ...patch,
+        updatedAt: Date.now(),
+      }),
+    )
+    this.emit()
+    this.queuePersist()
+  }
+
+  setProjectDates(id: string, startAt: number, targetAt: number): void {
+    this.updateProject(id, { startAt, targetAt })
+  }
+
+  setProjectBlockedBy(id: string, blockedByIds: string[]): void {
+    this.updateProject(id, { blockedByIds })
+  }
+
+  updateMilestone(id: string, patch: Partial<Milestone>): void {
+    const milestone = this.milestones.get(id)
+    if (!milestone) return
+    this.milestones.set(id, normalizeMilestone({ ...milestone, ...patch }))
+    this.emit()
+    this.queuePersist()
+  }
+
+  updateInitiative(id: string, patch: Partial<Initiative>): void {
+    const initiative = this.initiatives.get(id)
+    if (!initiative) return
+    this.initiatives.set(id, {
+      ...initiative,
+      ...patch,
+      projectIds: patch.projectIds ? [...patch.projectIds] : [...initiative.projectIds],
+      updatedAt: Date.now(),
+    })
+    this.emit()
+    this.queuePersist()
+  }
+
+  documentsFor(projectId: string): PlanningDocument[] {
+    return [...this.documents.values()].filter((doc) => doc.projectId === projectId)
+  }
+
+  milestonesFor(projectId: string): Milestone[] {
+    return [...this.milestones.values()]
+      .filter((milestone) => milestone.projectId === projectId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  }
+
+  classifiedCycles(now = Date.now()) {
+    return classifyCycles([...this.cycles.values()], now)
+  }
+
+  issuesForCycle(cycleId: string): Issue[] {
+    return [...this.issues.values()]
+      .filter((issue) => issue.cycleId === cycleId && !issue.archivedAt)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  }
+
+  rolloverEndedCycles(now = Date.now()): Cycle[] {
+    const created: Cycle[] = []
+    const states = [...this.states.values()]
+    for (const cycle of [...this.cycles.values()]) {
+      if (cycle.completedAt != null || now <= cycle.endsAt) continue
+      const team = this.teams.get(cycle.teamId)
+      const result = rolloverCycle({
+        cycle,
+        issues: [...this.issues.values()],
+        states,
+        now,
+        durationWeeks: team?.cycleDurationWeeks ?? 2,
+      })
+      this.cycles.set(result.completed.id, result.completed)
+      const existingNext = [...this.cycles.values()].find(
+        (row) => row.teamId === cycle.teamId && row.number === result.next.number,
+      )
+      const next = existingNext ?? result.next
+      if (!existingNext) this.cycles.set(next.id, next)
+      for (const moved of result.moved) {
+        const current = this.issues.get(moved.id)
+        if (!current) continue
+        this.writeEntity({ ...current, cycleId: next.id, updatedAt: now })
+      }
+      created.push(next)
+    }
+    if (created.length > 0) {
+      this.emit()
+      this.queuePersist()
+    }
+    return created
   }
 
   me(): User {

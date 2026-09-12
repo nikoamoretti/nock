@@ -22,6 +22,7 @@ export type ViewId =
   | 'board'
   | 'projects'
   | 'cycles'
+  | 'initiatives'
 
 export type Layout = 'list' | 'board'
 
@@ -91,6 +92,7 @@ export interface Team {
   key: string
   name: string
   issueCounter: number
+  cycleDurationWeeks?: number
 }
 
 export interface User {
@@ -122,9 +124,16 @@ export interface Project {
   teamId: string
   name: string
   description: string
+  summary: string
   status: ProjectStatus
   area: string
   health: ProjectHealth
+  leadId: string | null
+  startAt: number | null
+  targetAt: number | null
+  teamIds: string[]
+  memberIds: string[]
+  blockedByIds: string[]
   createdAt: number
   updatedAt: number
   syncId: number
@@ -146,6 +155,8 @@ export interface Cycle {
   number: number
   startsAt: number
   endsAt: number
+  completedAt: number | null
+  scopeIssueIds: string[]
   createdAt: number
   updatedAt: number
   syncId: number
@@ -156,6 +167,31 @@ export interface Milestone {
   projectId: string
   name: string
   sortOrder: number
+  targetAt: number | null
+}
+
+export interface Initiative {
+  id: string
+  name: string
+  description: string
+  ownerId: string | null
+  leadTeamId: string | null
+  status: ProjectStatus
+  priority: Priority
+  targetAt: number | null
+  projectIds: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+export interface PlanningDocument {
+  id: string
+  projectId: string | null
+  initiativeId: string | null
+  title: string
+  body: string
+  createdAt: number
+  updatedAt: number
 }
 
 export interface Issue {
@@ -263,6 +299,8 @@ export interface Snapshot {
   projects: Project[]
   cycles: Cycle[]
   milestones: Milestone[]
+  initiatives: Initiative[]
+  documents: PlanningDocument[]
   issues: Issue[]
   projectUpdates: ProjectUpdate[]
   comments: IssueComment[]

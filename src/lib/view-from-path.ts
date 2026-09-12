@@ -8,5 +8,6 @@ export function viewFromPath(pathname: string): ViewId {
   if (pathname.includes('/active')) return 'active'
   if (pathname.startsWith('/projects')) return 'projects'
   if (pathname.startsWith('/cycles')) return 'cycles'
+  if (pathname.startsWith('/initiatives')) return 'initiatives'
   return 'all'
 }

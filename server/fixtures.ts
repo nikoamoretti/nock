@@ -92,7 +92,7 @@ export async function seedWorkspace(
       `INSERT INTO projects (
          id, workspace_id, team_id, name, description, summary, status, health, area,
          lead_id, start_at, target_at, created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,'',$6,$7,$8,$9,NULL,NULL,$10,$11)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT (id) DO NOTHING`,
       [
         project.id,
@@ -100,10 +100,13 @@ export async function seedWorkspace(
         project.teamId,
         project.name,
         project.description,
+        project.summary ?? '',
         project.status,
         project.health,
         project.area,
-        snapshot.currentUserId,
+        project.leadId ?? null,
+        project.startAt ?? null,
+        project.targetAt ?? null,
         project.createdAt,
         project.updatedAt,
       ],
@@ -113,6 +116,21 @@ export async function seedWorkspace(
        ON CONFLICT (project_id, team_id) DO NOTHING`,
       [workspaceId, project.id, project.teamId],
     )
+    for (const teamId of project.teamIds ?? []) {
+      await db.query(
+        `INSERT INTO project_teams (workspace_id, project_id, team_id) VALUES ($1,$2,$3)
+         ON CONFLICT (project_id, team_id) DO NOTHING`,
+        [workspaceId, project.id, teamId],
+      )
+    }
+    for (const userId of project.memberIds ?? []) {
+      await db.query(
+        `INSERT INTO project_members (workspace_id, project_id, user_id, role)
+         VALUES ($1,$2,$3,'member')
+         ON CONFLICT (project_id, user_id) DO NOTHING`,
+        [workspaceId, project.id, userId],
+      )
+    }
   }
 
   for (const cycle of snapshot.cycles) {
@@ -120,7 +138,7 @@ export async function seedWorkspace(
       `INSERT INTO cycles (
          id, workspace_id, team_id, number, starts_at, ends_at, completed_at,
          created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$8)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (id) DO NOTHING`,
       [
         cycle.id,
@@ -129,6 +147,7 @@ export async function seedWorkspace(
         cycle.number,
         cycle.startsAt,
         cycle.endsAt,
+        cycle.completedAt ?? null,
         cycle.createdAt,
         cycle.updatedAt,
       ],
@@ -139,9 +158,17 @@ export async function seedWorkspace(
     await db.query(
       `INSERT INTO milestones (
          id, workspace_id, project_id, name, target_at, sort_order, created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,NULL,$5,$6,$6)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
        ON CONFLICT (id) DO NOTHING`,
-      [milestone.id, workspaceId, milestone.projectId, milestone.name, milestone.sortOrder, now],
+      [
+        milestone.id,
+        workspaceId,
+        milestone.projectId,
+        milestone.name,
+        milestone.targetAt ?? null,
+        milestone.sortOrder,
+        now,
+      ],
     )
   }
 
@@ -189,6 +216,56 @@ export async function seedWorkspace(
         [workspaceId, issue.id, userId],
       )
     }
+  }
+
+  for (const initiative of snapshot.initiatives ?? []) {
+    await db.query(
+      `INSERT INTO initiatives (
+         id, workspace_id, name, description, owner_id, lead_team_id, status, priority,
+         target_at, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        initiative.id,
+        workspaceId,
+        initiative.name,
+        initiative.description,
+        initiative.ownerId,
+        initiative.leadTeamId,
+        initiative.status,
+        initiative.priority,
+        initiative.targetAt,
+        initiative.createdAt,
+        initiative.updatedAt,
+      ],
+    )
+    for (const projectId of initiative.projectIds) {
+      await db.query(
+        `INSERT INTO initiative_projects (workspace_id, initiative_id, project_id)
+         VALUES ($1,$2,$3)
+         ON CONFLICT (initiative_id, project_id) DO NOTHING`,
+        [workspaceId, initiative.id, projectId],
+      )
+    }
+  }
+
+  for (const doc of snapshot.documents ?? []) {
+    await db.query(
+      `INSERT INTO documents (
+         id, workspace_id, project_id, initiative_id, title, body, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        doc.id,
+        workspaceId,
+        doc.projectId,
+        doc.initiativeId,
+        doc.title,
+        doc.body,
+        doc.createdAt,
+        doc.updatedAt,
+      ],
+    )
   }
 
   return {

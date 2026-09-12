@@ -192,7 +192,7 @@ export function registerCatalog(system: CommandSystem): void {
         selectedIds: [...ctx.store.ui.selectedIssueIds],
       })
       ctx.store.openIssuePeek(id)
-      if (ctx.view !== 'projects' && ctx.view !== 'cycles') {
+      if (ctx.view !== 'projects' && ctx.view !== 'cycles' && ctx.view !== 'initiatives') {
         ctx.navigate?.(issuePeekPath(ctx.view, issue.identifier))
       }
       return { ok: true }
@@ -656,7 +656,11 @@ export function registerCatalog(system: CommandSystem): void {
     id: 'view.toggleLayout',
     label: 'Toggle list / board',
     shortcut: { key: 'b', mod: true },
-    when: (ctx) => ctx.view !== 'inbox' && ctx.view !== 'projects' && ctx.view !== 'cycles',
+    when: (ctx) =>
+      ctx.view !== 'inbox' &&
+      ctx.view !== 'projects' &&
+      ctx.view !== 'cycles' &&
+      ctx.view !== 'initiatives',
     run: (ctx) => {
       if (ctx.view === 'board') {
         ctx.store.setLayout('list')
@@ -751,6 +755,26 @@ export function registerCatalog(system: CommandSystem): void {
     when: () => true,
     run: (ctx) => {
       ctx.navigate?.('/cycles')
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'nav.currentCycle',
+    label: 'Go to current cycle',
+    when: () => true,
+    run: (ctx) => {
+      ctx.navigate?.('/cycles/current')
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'nav.initiatives',
+    label: 'Go to Initiatives',
+    when: () => true,
+    run: (ctx) => {
+      ctx.navigate?.('/initiatives')
       return { ok: true }
     },
   })

@@ -361,6 +361,25 @@ describe('NockStore', () => {
     expect(store.activitiesForIssue(issue.id)[0]?.body).toContain('Commented')
     expect(store.linksForIssue(issue.id)[0]?.url).toBe('https://example.test')
   })
+
+  it('rolls ended cycles and keeps project date edits local', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false, now: Date.parse('2026-09-11T12:00:00Z') }))
+    const ended = [...store.cycles.values()].find((cycle) => cycle.number === 11)!
+    store.cycles.set(ended.id, { ...ended, completedAt: null, endsAt: Date.now() - 1000 })
+    const leftover = store.createIssue({
+      title: 'Did not ship',
+      stateId: IDS.stateTodo,
+      cycleId: ended.id,
+    })
+    store.rolloverEndedCycles(Date.now())
+    expect(store.cycles.get(ended.id)?.completedAt).not.toBeNull()
+    expect(store.issue(leftover.id)?.cycleId).not.toBe(ended.id)
+    const project = [...store.projects.values()][0]!
+    const nextStart = (project.startAt ?? Date.now()) + 86400000
+    const nextEnd = (project.targetAt ?? Date.now()) + 86400000
+    store.setProjectDates(project.id, nextStart, nextEnd)
+    expect(store.projects.get(project.id)?.startAt).toBe(nextStart)
+  })
 })
 
 class FailThenSavePersistence implements Persistence {

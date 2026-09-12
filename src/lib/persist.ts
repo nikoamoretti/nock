@@ -77,6 +77,8 @@ export function mergePersistedSnapshot(
     activities: snapshot.activities ?? [],
     attachments: snapshot.attachments ?? [],
     savedViews: snapshot.savedViews ?? [],
+    initiatives: snapshot.initiatives ?? [],
+    documents: snapshot.documents ?? [],
     pendingCommands: commands?.pending ?? snapshot.pendingCommands ?? [],
     seenMutationIds: commands?.seen ?? snapshot.seenMutationIds ?? [],
   }

@@ -42,6 +42,19 @@ describe('postgres schema', () => {
     await db.close()
   })
 
+  it('applies the planning relations migration', async () => {
+    const db = await createTestDb()
+    const applied = await db.query<{ id: string }>(
+      `SELECT id FROM schema_migrations ORDER BY id`,
+    )
+    expect(applied.rows.map((row) => row.id)).toContain('002_planning')
+    const tables = await db.query<{ tablename: string }>(
+      `SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`,
+    )
+    expect(tables.rows.map((row) => row.tablename)).toContain('project_relations')
+    await db.close()
+  })
+
   it('enforces one team, team-local number, and state/team membership', async () => {
     const db = await createTestDb()
     const { seedWorkspace } = await import('./fixtures.ts')

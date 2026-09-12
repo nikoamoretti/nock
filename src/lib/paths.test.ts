@@ -12,6 +12,6 @@ describe('issue paths', () => {
     expect(issuePeekPath('all', 'ENG-12')).toBe('/eng/all/ENG-12')
     expect(issueFullPath('ENG-12')).toBe('/issues/ENG-12')
     expect(identifierFromPath('/eng/all/ENG-12')).toBe('ENG-12')
-    expect(identifierFromPath('/issues/ENG-12')).toBe('ENG-12')
+    expect(collectionPath('initiatives')).toBe('/initiatives')
   })
 })

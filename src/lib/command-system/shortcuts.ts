@@ -17,6 +17,8 @@ const GO_PATHS: Record<string, string> = {
   b: '/eng/board',
   p: '/projects',
   c: '/cycles',
+  n: '/initiatives',
+  y: '/cycles/current',
 }
 
 export class ShortcutManager {

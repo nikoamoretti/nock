@@ -22,6 +22,7 @@ export const FIXTURE_TABLES = [
   'milestones',
   'initiatives',
   'initiative_projects',
+  'project_relations',
   'documents',
   'comments',
   'attachments',

@@ -3,7 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/app-shell'
 import { IssueDetailPage } from './components/issue-detail'
 import { IssueView } from './components/issue-view'
-import { CyclesView, ProjectDetail, ProjectsView } from './components/plan-views'
+import { CyclesView, CycleDetail, InitiativeDetail, InitiativesView, ProjectDetail, ProjectsView } from './components/plan-views'
 import { StoreProvider } from './hooks/use-nock'
 import { IdbPersistence } from './lib/persist'
 import { NockStore } from './lib/store'
@@ -96,6 +96,9 @@ export default function App() {
             <Route path="/projects" element={<ProjectsView />} />
             <Route path="/projects/:projectId" element={<ProjectDetail />} />
             <Route path="/cycles" element={<CyclesView />} />
+            <Route path="/cycles/:cycleId" element={<CycleDetail />} />
+            <Route path="/initiatives" element={<InitiativesView />} />
+            <Route path="/initiatives/:initiativeId" element={<InitiativeDetail />} />
           </Route>
         </Routes>
       </HashRouter>

@@ -126,7 +126,7 @@ export class CommandSystem {
       { keys: 'Shift+J / K', action: 'Extend selection' },
       { keys: '[ / ]', action: 'Move board card to previous / next column' },
       { keys: '1 / 3', action: 'Triage accept / decline' },
-      { keys: 'G then I T M A B P C', action: 'Go to a view' },
+      { keys: 'G then I T M A B P C N Y', action: 'Go to a view' },
     )
     return rows
   }

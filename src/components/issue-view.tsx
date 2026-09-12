@@ -21,6 +21,7 @@ const TITLES: Record<ViewId, string> = {
   board: 'Board',
   projects: 'Projects',
   cycles: 'Cycles',
+  initiatives: 'Initiatives',
 }
 
 export function IssueView({ view }: { view: ViewId }) {

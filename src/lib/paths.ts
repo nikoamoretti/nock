@@ -12,10 +12,12 @@ export function collectionPath(view: ViewId): string {
       return '/eng/backlog'
     case 'board':
       return '/eng/board'
-    case 'projects':
-      return '/projects'
-    case 'cycles':
-      return '/cycles'
+      case 'projects':
+        return '/projects'
+      case 'cycles':
+        return '/cycles'
+      case 'initiatives':
+        return '/initiatives'
     default:
       return '/eng/all'
   }
