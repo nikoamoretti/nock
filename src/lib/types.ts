@@ -367,6 +367,8 @@ export interface UiState {
   composerOpen: boolean
   commandOpen: boolean
   commandQuery: string
+  searchOpen: boolean
+  searchQuery: string
   propertyMenu: PropertyMenuKind | null
   inboxPane: 'triage' | 'priority' | 'other'
   highlightedNotificationId: string | null
@@ -394,6 +396,7 @@ export type OverlayId =
   | 'filter'
   | 'property'
   | 'command'
+  | 'search'
   | 'composer'
   | 'peek'
 

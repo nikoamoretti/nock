@@ -130,16 +130,20 @@ function GroupHeader({ group }: { group: Extract<FlatRow, { type: 'header' }> })
   const store = useNock()
   const state = group.stateId ? store.states.get(group.stateId) : undefined
   return (
-    <button
-      type="button"
-      style={{ height: LIST_ROW_HEIGHT }}
-      className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-line/80 bg-fill/95 px-4 text-[12px] text-mute backdrop-blur"
-      onClick={() => store.toggleCollapsed(group.key)}
-    >
-      {state && <StatusIcon state={state} />}
-      <span className="font-medium text-ink">{group.label}</span>
-      <span className="text-dim">{group.count}</span>
-    </button>
+    <div role="presentation" style={{ height: LIST_ROW_HEIGHT }}>
+      <button
+        type="button"
+        tabIndex={-1}
+        data-testid={`group-header-${group.key}`}
+        aria-label={`${group.label}, ${group.count} issues`}
+        className="sticky top-0 z-10 flex h-full w-full items-center gap-2 border-b border-line/80 bg-fill/95 px-4 text-[12px] text-mute backdrop-blur"
+        onClick={() => store.toggleCollapsed(group.key)}
+      >
+        {state && <StatusIcon state={state} />}
+        <span className="font-medium text-ink">{group.label}</span>
+        <span className="text-dim">{group.count}</span>
+      </button>
+    </div>
   )
 }
 

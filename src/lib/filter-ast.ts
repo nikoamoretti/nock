@@ -51,6 +51,16 @@ export function flattenClauses(ast: FilterAst): FilterClause[] {
   return ast.nodes.flatMap(flattenClauses)
 }
 
+export function combineFilterRoot(
+  ast: FilterAst,
+  type: 'and' | 'or',
+): FilterAst {
+  if (ast.type === 'all') return ast
+  if (ast.type === type) return ast
+  if (ast.type === 'clause') return { type, nodes: [ast] }
+  return { type, nodes: ast.nodes }
+}
+
 function clause(field: FilterField, value: string | number): FilterAst {
   return { type: 'clause', clause: { field, op: 'eq', value } }
 }

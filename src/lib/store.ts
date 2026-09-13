@@ -5,7 +5,10 @@ import {
   type IssuePatch,
 } from './commands'
 import { CommandSystem } from './command-system'
-import { astFromFilters } from './filter-ast'
+import type { EntityMaps } from './entity-store'
+import { astFromFilters, combineFilterRoot, filtersFromAst } from './filter-ast'
+import type { PathScope } from './paths'
+import type { SearchDocument } from './search'
 import { splitInbox, markAllRead, defaultDeliveryPreferences, type DeliveryPreferences, type InboxNotification } from './inbox'
 import {
   type ExternalIdentity,
@@ -43,6 +46,7 @@ import type {
   CreateIssueInput,
   Cycle,
   DisplayProperty,
+  FilterAst,
   GroupBy,
   Initiative,
   InversePatch,
@@ -101,6 +105,8 @@ function defaultUi(snapshot: Snapshot): UiState {
     composerOpen: false,
     commandOpen: false,
     commandQuery: '',
+    searchOpen: false,
+    searchQuery: '',
     propertyMenu: null,
     inboxPane: 'triage',
     highlightedNotificationId: null,
@@ -143,6 +149,7 @@ export class NockStore {
   lastSyncId = 0
   currentUserId = ''
   workspace!: Workspace
+  workspaces = new Map<string, Workspace>()
   teams = new Map<string, Team>()
   users = new Map<string, User>()
   states = new Map<string, WorkflowState>()
@@ -242,6 +249,7 @@ export class NockStore {
     this.lastSyncId = snapshot.lastSyncId
     this.currentUserId = snapshot.currentUserId
     this.workspace = { ...snapshot.workspace }
+    this.workspaces = new Map([[this.workspace.id, { ...this.workspace }]])
     this.teams = new Map(snapshot.teams.map((team) => [team.id, { ...team }]))
     this.users = new Map(snapshot.users.map((user) => [user.id, { ...user }]))
     this.states = new Map(
@@ -483,6 +491,35 @@ export class NockStore {
       this.teams.get(IDS.teamEng) ?? [...this.teams.values()][0]
     if (!team) throw new Error('[nock] no team in workspace')
     return team
+  }
+
+  routeScope(): PathScope {
+    return {
+      workspaceKey: this.workspace.urlKey,
+      teamKey: this.defaultTeam().key,
+    }
+  }
+
+  get entities(): EntityMaps {
+    return {
+      workspaces: this.workspaces,
+      users: this.users,
+      teams: this.teams,
+      workflowStates: this.states,
+      labels: this.labels,
+      issues: this.issues,
+      comments: this.comments,
+      projects: this.projects,
+      projectUpdates: this.projectUpdates,
+      milestones: this.milestones,
+      cycles: this.cycles,
+      initiatives: this.initiatives,
+      documents: this.documents,
+      notifications: this.notifications,
+      customerRequests: this.customerRequests,
+      externalLinks: this.externalLinks,
+      savedViews: this.savedViews,
+    }
   }
 
   statesForTeam(teamId: string): WorkflowState[] {
@@ -1099,9 +1136,30 @@ export class NockStore {
     this.emit()
   }
 
+  setFilterAst(ast: FilterAst): void {
+    const next = structuredClone(ast)
+    const filters = filtersFromAst(next)
+    if (
+      JSON.stringify(this.ui.filterAst) === JSON.stringify(next) &&
+      this.ui.filters.assigneeId === filters.assigneeId &&
+      this.ui.filters.stateId === filters.stateId &&
+      this.ui.filters.priority === filters.priority &&
+      this.ui.filters.projectId === filters.projectId &&
+      this.ui.filters.cycleId === filters.cycleId
+    ) {
+      return
+    }
+    this.ui.filterAst = next
+    this.ui.filters = filters
+    this.ui.savedViewId = null
+    this.emit()
+  }
+
   setFilter<K extends keyof IssueFilters>(key: K, value: IssueFilters[K]): void {
     this.ui.filters = { ...this.ui.filters, [key]: value }
-    this.ui.filterAst = astFromFilters(this.ui.filters)
+    const next = astFromFilters(this.ui.filters)
+    this.ui.filterAst =
+      this.ui.filterAst.type === 'or' ? combineFilterRoot(next, 'or') : next
     this.ui.savedViewId = null
     this.emit()
   }
@@ -1179,11 +1237,13 @@ export class NockStore {
     }
     this.ui.composerOpen = true
     this.ui.commandOpen = false
+    this.ui.searchOpen = false
     this.ui.propertyMenu = null
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
     this.ui.helpOpen = false
     this.dropModal('command')
+    this.dropModal('search')
     this.dropModal('property')
     this.dropModal('filter')
     this.dropModal('display')
@@ -1242,12 +1302,14 @@ export class NockStore {
 
   openCommand(): void {
     this.ui.commandOpen = true
+    this.ui.searchOpen = false
     this.ui.composerOpen = false
     this.ui.commandQuery = ''
     this.ui.propertyMenu = null
     this.ui.filterMenuOpen = false
     this.ui.displayMenuOpen = false
     this.dropModal('composer')
+    this.dropModal('search')
     this.dropModal('property')
     this.dropModal('filter')
     this.dropModal('display')
@@ -1258,6 +1320,34 @@ export class NockStore {
   closeCommand(): void {
     this.ui.commandOpen = false
     this.dropModal('command')
+    this.emit()
+  }
+
+  openSearch(): void {
+    this.ui.searchOpen = true
+    this.ui.commandOpen = false
+    this.ui.composerOpen = false
+    this.ui.searchQuery = ''
+    this.ui.propertyMenu = null
+    this.ui.filterMenuOpen = false
+    this.ui.displayMenuOpen = false
+    this.dropModal('composer')
+    this.dropModal('command')
+    this.dropModal('property')
+    this.dropModal('filter')
+    this.dropModal('display')
+    this.pushModal('search')
+    this.emit()
+  }
+
+  closeSearch(): void {
+    this.ui.searchOpen = false
+    this.dropModal('search')
+    this.emit()
+  }
+
+  setSearchQuery(query: string): void {
+    this.ui.searchQuery = query
     this.emit()
   }
 
@@ -1291,6 +1381,7 @@ export class NockStore {
     if (id === 'filter') this.ui.filterMenuOpen = false
     if (id === 'property') this.ui.propertyMenu = null
     if (id === 'command') this.ui.commandOpen = false
+    if (id === 'search') this.ui.searchOpen = false
     if (id === 'composer') this.ui.composerOpen = false
     if (id === 'peek') this.ui.peekOpen = false
     this.dropModal(id)
@@ -1606,14 +1697,56 @@ export class NockStore {
   }
 
   searchIssues(query: string): Issue[] {
-    return [...this.issues.values()]
-      .filter(
-        (issue) =>
-          !issue.archivedAt &&
-          fuzzyMatch(query, `${issue.identifier} ${issue.title}`),
+    return this.searchDocuments(query)
+      .filter((row) => row.type === 'issue')
+      .map((row) => this.issues.get(row.id))
+      .filter((issue): issue is Issue => Boolean(issue))
+  }
+
+  searchDocuments(query: string): SearchDocument[] {
+    const needle = query.trim()
+    const commentsByIssue = new Map<string, string>()
+    for (const comment of this.comments.values()) {
+      const prev = commentsByIssue.get(comment.issueId) ?? ''
+      commentsByIssue.set(comment.issueId, `${prev} ${comment.body}`)
+    }
+    const issues: SearchDocument[] = [...this.issues.values()]
+      .filter((issue) => !issue.archivedAt)
+      .map((issue) => ({
+        id: issue.id,
+        type: 'issue' as const,
+        title: issue.title,
+        identifier: issue.identifier,
+        body: `${issue.description} ${commentsByIssue.get(issue.id) ?? ''}`,
+        updatedAt: issue.updatedAt,
+      }))
+    const projects: SearchDocument[] = [...this.projects.values()].map(
+      (project) => ({
+        id: project.id,
+        type: 'project' as const,
+        title: project.name,
+        body: `${project.summary} ${project.description}`,
+        updatedAt: project.updatedAt ?? 0,
+      }),
+    )
+    const documents: SearchDocument[] = [...this.documents.values()].map(
+      (doc) => ({
+        id: doc.id,
+        type: 'document' as const,
+        title: doc.title,
+        body: doc.body,
+        updatedAt: doc.updatedAt,
+      }),
+    )
+    return [...issues, ...projects, ...documents]
+      .filter((row) =>
+        fuzzyMatch(
+          needle,
+          `${row.identifier ?? ''} ${row.title} ${row.body}`,
+        ),
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 20)
+      .slice(0, 30)
   }
 
   updatesForProject(projectId: string): ProjectUpdate[] {

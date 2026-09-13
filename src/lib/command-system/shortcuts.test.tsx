@@ -77,6 +77,30 @@ describe('ShortcutManager and focus', () => {
     expect(nock.ui.selectedIssueIds).toEqual([])
   })
 
+  it('opens search with / and commands with Cmd+K', () => {
+    const nock = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    nock.commands.handleKey(key({ key: '/' }))
+    expect(nock.ui.searchOpen).toBe(true)
+    expect(nock.ui.commandOpen).toBe(false)
+    nock.commands.handleKey(key({ key: 'k', metaKey: true }))
+    expect(nock.ui.commandOpen).toBe(true)
+    expect(nock.ui.searchOpen).toBe(false)
+  })
+
+  it('G then I navigates to the workspace inbox', () => {
+    const nock = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const paths: string[] = []
+    nock.commands.setHost({
+      view: 'all',
+      navigate: (to) => {
+        if (typeof to === 'string') paths.push(to)
+      },
+    })
+    nock.commands.handleKey(key({ key: 'g' }))
+    nock.commands.handleKey(key({ key: 'i' }))
+    expect(paths[0]).toBe('/acme/inbox')
+  })
+
   it('runs inbox triage keys 1, 2, 3, and H', () => {
     const nock = NockStore.from(createBootstrapSnapshot({ demo: false }))
     nock.commands.setHost({ view: 'inbox' })

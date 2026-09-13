@@ -4,7 +4,7 @@ import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
 import { filtersActive } from '../lib/filters'
 import type { Issue, ViewId } from '../lib/types'
-import { filtersFromSearch, searchFromFilters } from '../lib/url-filters'
+import { astFromSearch, searchFromAst } from '../lib/url-filters'
 import { BulkBar } from './bulk-bar'
 import { DisplayMenu } from './display-menu'
 import { FilterMenu } from './filter-menu'
@@ -30,14 +30,14 @@ export function IssueView({ view }: { view: ViewId }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { identifier } = useParams()
-  const storeSearch = searchFromFilters(store.ui.filters)
+  const storeSearch = searchFromAst(store.ui.filterAst)
 
   useEffect(() => {
-    store.setFilters(filtersFromSearch(location.search))
+    store.setFilterAst(astFromSearch(location.search))
   }, [location.search, store])
 
   useEffect(() => {
-    const current = searchFromFilters(filtersFromSearch(location.search))
+    const current = searchFromAst(astFromSearch(location.search))
     if (current !== storeSearch) {
       navigate(
         { pathname: location.pathname, search: storeSearch },

@@ -4,11 +4,13 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ReactNode } from 'react'
+import { AppShell } from '../components/app-shell'
 import { CommandPalette } from '../components/command-palette'
 import { Composer } from '../components/composer'
 import { HelpOverlay } from '../components/help-overlay'
 import { IssueList } from '../components/issue-list'
 import { PersistBanner } from '../components/persist-banner'
+import { SearchOverlay } from '../components/search-overlay'
 import { StoreProvider } from '../hooks/use-nock'
 import { createBootstrapSnapshot } from '../lib/seed'
 import { NockStore } from '../lib/store'
@@ -62,5 +64,24 @@ describe('shell accessibility regressions', () => {
     const tabbable = rows.filter((row) => row.getAttribute('tabindex') === '0')
     expect(tabbable).toHaveLength(1)
     expect(screen.getByRole('listbox', { name: 'Issues' })).toBeTruthy()
+    const headers = document.querySelectorAll('[data-testid^="group-header-"]')
+    expect(headers.length).toBeGreaterThan(0)
+    for (const header of headers) {
+      expect(header.getAttribute('tabindex')).toBe('-1')
+    }
+  })
+
+  it('exposes a skip link to main content', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    renderStore(store, <AppShell />)
+    const skip = screen.getByRole('link', { name: 'Skip to content' })
+    expect(skip.getAttribute('href')).toBe('#nock-main')
+  })
+
+  it('exposes search as a separate dialog from the command palette', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    store.ui.searchOpen = true
+    renderStore(store, <SearchOverlay />)
+    expect(screen.getByRole('dialog', { name: 'Search' })).toBeTruthy()
   })
 })

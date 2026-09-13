@@ -9,16 +9,16 @@ export type ShortcutBinding = {
   argsFrom?: (event: KeyboardEvent) => CommandArgs
 }
 
-const GO_PATHS: Record<string, string> = {
-  i: '/inbox',
-  t: '/inbox',
-  m: '/my-issues',
-  a: '/eng/all',
-  b: '/eng/board',
-  p: '/projects',
-  c: '/cycles',
-  n: '/initiatives',
-  y: '/cycles/current',
+const GO_COMMANDS: Record<string, string> = {
+  i: 'nav.inbox',
+  t: 'nav.inbox',
+  m: 'nav.myIssues',
+  a: 'nav.all',
+  b: 'nav.board',
+  p: 'nav.projects',
+  c: 'nav.cycles',
+  n: 'nav.initiatives',
+  y: 'nav.currentCycle',
 }
 
 export class ShortcutManager {
@@ -43,11 +43,11 @@ export class ShortcutManager {
     if (this.go && !typing) {
       this.go = false
       window.clearTimeout(this.goTimer)
-      const path = GO_PATHS[event.key.toLowerCase()]
-      if (path) {
+      const commandId = GO_COMMANDS[event.key.toLowerCase()]
+      if (commandId && this.system.canRun(commandId, ctx)) {
         event.preventDefault()
         event.stopImmediatePropagation()
-        ctx.navigate?.(path)
+        this.system.run(commandId, undefined, ctx)
         return true
       }
     }

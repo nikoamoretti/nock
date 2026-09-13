@@ -35,6 +35,15 @@ class LatchPersistence implements Persistence {
 }
 
 describe('NockStore', () => {
+  it('exposes canonical entity maps without a second store', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    expect(store.entities.issues).toBe(store.issues)
+    expect(store.entities.workflowStates).toBe(store.states)
+    expect(store.entities.workspaces.get(store.workspace.id)?.urlKey).toBe(
+      'acme',
+    )
+    expect(store.routeScope()).toEqual({ workspaceKey: 'acme', teamKey: 'ENG' })
+  })
   it('mints ENG-N identifiers and increments lastSyncId', async () => {
     const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
     const first = store.createIssue({ title: 'First' })

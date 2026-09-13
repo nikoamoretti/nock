@@ -4,6 +4,13 @@ import { useNock } from '../hooks/use-nock'
 import { cn, formatRange, formatShortDate } from '../lib/cn'
 import { currentCycle } from '../lib/filters'
 import {
+  collectionPath,
+  cyclePath,
+  cyclesCurrentPath,
+  initiativePath,
+  projectPath,
+} from '../lib/paths'
+import {
   cycleCapacity,
   cycleProgress,
   cycleProgressGraph,
@@ -41,7 +48,7 @@ export function ProjectsView() {
   const rows: TimelineRow[] = projects.map((project) => ({
     id: project.id,
     label: project.name,
-    href: `/projects/${project.id}`,
+    href: projectPath(project.id, store.routeScope()),
     startAt: project.startAt,
     targetAt: project.targetAt,
     milestones: store.milestonesFor(project.id),
@@ -85,7 +92,7 @@ function ProjectCard({ project }: { project: Project }) {
   const lead = project.leadId ? store.users.get(project.leadId) : null
   return (
     <Link
-      to={`/projects/${project.id}`}
+      to={projectPath(project.id, store.routeScope())}
       className="rounded-lg border border-line bg-side p-4 hover:border-accent/40"
     >
       <div className="flex items-start justify-between gap-3">
@@ -148,7 +155,7 @@ export function ProjectDetail() {
           data-tauri-drag-region
           className="flex h-11 items-center gap-3 border-b border-line px-4"
         >
-          <Link to="/projects" className="text-[12px] text-mute hover:text-ink">
+          <Link to={collectionPath('projects', store.routeScope())} className="text-[12px] text-mute hover:text-ink">
             Projects
           </Link>
           <span className="text-dim">/</span>
@@ -282,7 +289,7 @@ export function CyclesView() {
           className="flex h-11 items-center gap-3 border-b border-line px-4 text-[13px] font-medium"
         >
           Cycles
-          <Link to="/cycles/current" className="text-[12px] font-normal text-accent hover:underline">
+          <Link to={cyclesCurrentPath(store.routeScope())} className="text-[12px] font-normal text-accent hover:underline">
             Current cycle
           </Link>
           <button
@@ -314,7 +321,7 @@ export function CycleDetail() {
     cycleId === 'current'
       ? currentCycle([...store.cycles.values()])
       : store.cycles.get(cycleId)
-  if (!cycle) return <Navigate to="/cycles" replace />
+  if (!cycle) return <Navigate to={collectionPath('cycles', store.routeScope())} replace />
   return <CycleIssueView cycle={cycle} />
 }
 
@@ -362,7 +369,7 @@ function CycleCard({ cycle }: { cycle: Cycle }) {
   const progress = cycleProgress(cycle.id, issues, [...store.states.values()])
   return (
     <Link
-      to={`/cycles/${cycle.id}`}
+      to={cyclePath(cycle.id, store.routeScope())}
       className="rounded-lg border border-line bg-side p-4 hover:border-accent/40"
       data-testid={`cycle-card-${cycle.id}`}
     >
@@ -394,7 +401,7 @@ function CycleIssueView({ cycle }: { cycle: Cycle }) {
           data-tauri-drag-region
           className="flex h-11 items-center gap-3 border-b border-line px-4"
         >
-          <Link to="/cycles" className="text-[12px] text-mute hover:text-ink">
+          <Link to={collectionPath('cycles', store.routeScope())} className="text-[12px] text-mute hover:text-ink">
             Cycles
           </Link>
           <span className="text-dim">/</span>
@@ -514,7 +521,7 @@ export function InitiativeDetail() {
         data-tauri-drag-region
         className="flex h-11 items-center gap-3 border-b border-line px-4"
       >
-        <Link to="/initiatives" className="text-[12px] text-mute hover:text-ink">
+        <Link to={collectionPath('initiatives', store.routeScope())} className="text-[12px] text-mute hover:text-ink">
           Initiatives
         </Link>
         <span className="text-dim">/</span>
@@ -553,7 +560,7 @@ function InitiativeCard({ initiative }: { initiative: Initiative }) {
   const owner = initiative.ownerId ? store.users.get(initiative.ownerId) : null
   return (
     <Link
-      to={`/initiatives/${initiative.id}`}
+      to={initiativePath(initiative.id, store.routeScope())}
       className="rounded-lg border border-line bg-side p-4 hover:border-accent/40"
     >
       <div className="flex items-start justify-between gap-3">

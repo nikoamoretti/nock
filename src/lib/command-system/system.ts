@@ -12,6 +12,7 @@ function capturingOpen(store: NockStore): boolean {
   return (
     store.ui.helpOpen ||
     store.ui.commandOpen ||
+    store.ui.searchOpen ||
     store.ui.propertyMenu !== null ||
     store.ui.composerOpen
   )

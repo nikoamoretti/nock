@@ -99,7 +99,7 @@ export function IssueDetail({
             <button
               type="button"
               className="rounded-md px-2 py-1 text-[12px] text-mute hover:bg-hover"
-              onClick={() => navigate(issueFullPath(issue.identifier))}
+              onClick={() => navigate(issueFullPath(issue.identifier, store.routeScope()))}
             >
               Full view
             </button>

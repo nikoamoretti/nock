@@ -3,21 +3,28 @@ import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
 import { formatShortcut } from '../lib/command-system'
 import { isDesktopApp } from '../lib/desktop'
-import { searchFromFilters } from '../lib/url-filters'
+import {
+  collectionPath,
+  type PathScope,
+} from '../lib/paths'
+import { searchFromAst } from '../lib/url-filters'
 import { NockMark } from './icons'
 
-const TEAM_LINKS = [
-  { to: '/projects', label: 'Projects' },
-  { to: '/initiatives', label: 'Initiatives' },
-  { to: '/eng/all', label: 'All issues' },
-  { to: '/eng/active', label: 'Active' },
-  { to: '/eng/backlog', label: 'Backlog' },
-  { to: '/eng/board', label: 'Board' },
-  { to: '/cycles', label: 'Cycles' },
-]
+function teamLinks(scope: PathScope) {
+  return [
+    { to: collectionPath('projects', scope), label: 'Projects' },
+    { to: collectionPath('initiatives', scope), label: 'Initiatives' },
+    { to: collectionPath('all', scope), label: 'All issues' },
+    { to: collectionPath('active', scope), label: 'Active' },
+    { to: collectionPath('backlog', scope), label: 'Backlog' },
+    { to: collectionPath('board', scope), label: 'Board' },
+    { to: collectionPath('cycles', scope), label: 'Cycles' },
+  ]
+}
 
 export function Sidebar() {
   const store = useNock()
+  const scope = store.routeScope()
   const inboxCount = store.issuesForView('inbox').length
   const mineCount = store.issuesForView('my-issues').length
 
@@ -38,21 +45,21 @@ export function Sidebar() {
       </div>
       <button
         type="button"
-        onClick={() => store.commands.run('command.palette')}
+        onClick={() => store.commands.run('workspace.search')}
         className="mx-2 mb-2 flex items-center justify-between rounded-md border border-line bg-fill px-2 py-1.5 text-[12px] text-mute hover:bg-hover"
       >
         Search
         <span className="rounded border border-line px-1 text-[10px]">
-          {formatShortcut({ key: 'k', mod: true })}
+          {formatShortcut({ key: '/' })}
         </span>
       </button>
       <nav className="flex flex-1 flex-col gap-0.5 px-2" aria-label="Workspace">
-        <SideLink to="/inbox" label="Inbox" count={inboxCount} />
-        <SideLink to="/my-issues" label="My issues" count={mineCount} />
+        <SideLink to={collectionPath('inbox', scope)} label="Inbox" count={inboxCount} />
+        <SideLink to={collectionPath('my-issues', scope)} label="My issues" count={mineCount} />
         <div className="mt-4 px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-dim">
           Workspace
         </div>
-        {TEAM_LINKS.map((link) => (
+        {teamLinks(scope).map((link) => (
           <SideLink key={link.to} to={link.to} label={link.label} />
         ))}
         {store.savedViews.size > 0 && (
@@ -78,7 +85,7 @@ export function Sidebar() {
       </nav>
       <div className="border-t border-line px-3 py-3 text-[11px] leading-5 text-dim">
         <div className="text-[12px] text-mute">{store.me().name}</div>
-        <div className="mt-1">C new · Space peek · ? help · G then I T M A P C N Y</div>
+        <div className="mt-1">C new · / search · ⌘K command · ? help</div>
       </div>
     </aside>
   )
@@ -96,7 +103,7 @@ function SideLink({
   const store = useNock()
   return (
     <NavLink
-      to={`${to}${searchFromFilters(store.ui.filters)}`}
+      to={`${to}${searchFromAst(store.ui.filterAst)}`}
       className={({ isActive }) =>
         cn(
           'flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] text-mute hover:bg-hover hover:text-ink',

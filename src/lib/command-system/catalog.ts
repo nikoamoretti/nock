@@ -1,6 +1,6 @@
 import type { IssuePatch } from '../commands'
 import { cloneIssue, uniqueIds, withId, withoutId } from '../issue-model'
-import { collectionPath, identifierFromPath, issuePeekPath } from '../paths'
+import { collectionPath, cyclesCurrentPath, identifierFromPath, issuePeekPath, projectPath } from '../paths'
 import type { Issue, Priority, PropertyMenuKind } from '../types'
 import type { CommandSystem } from './system'
 import type { CommandArgs, CommandContext, CommandResult } from './types'
@@ -96,6 +96,24 @@ export function registerCatalog(system: CommandSystem): void {
   })
 
   registry.register({
+    id: 'workspace.search',
+    label: 'Search workspace',
+    shortcut: { key: '/', whenTyping: 'never' },
+    palette: false,
+    when: () => true,
+    run: (ctx) => {
+      if (ctx.store.ui.searchOpen) {
+        ctx.store.closeSearch()
+        system.restoreFocusIfQuiet()
+        return { ok: true }
+      }
+      system.captureFocus()
+      ctx.store.openSearch()
+      return { ok: true }
+    },
+  })
+
+  registry.register({
     id: 'surface.dismiss',
     label: 'Dismiss',
     shortcut: { key: 'Escape', whenTyping: 'always' },
@@ -109,6 +127,7 @@ export function registerCatalog(system: CommandSystem): void {
         top === 'filter' ||
         top === 'property' ||
         top === 'command' ||
+        top === 'search' ||
         top === 'composer'
       if (blocking) {
         ctx.store.dismissOverlays()
@@ -178,12 +197,12 @@ export function registerCatalog(system: CommandSystem): void {
         if (row.sourceType === 'issue' && row.sourceId) {
           const issue = ctx.store.issue(row.sourceId) ?? ctx.store.issueByIdentifier(row.sourceId)
           if (issue) {
-            ctx.navigate?.(issuePeekPath('inbox', issue.identifier))
+            ctx.navigate?.(issuePeekPath('inbox', issue.identifier, ctx.store.routeScope()))
             return { ok: true }
           }
         }
         if (row.sourceType === 'project' && row.sourceId) {
-          ctx.navigate?.(`/projects/${row.sourceId}`)
+          ctx.navigate?.(projectPath(row.sourceId, ctx.store.routeScope()))
           return { ok: true }
         }
         return { ok: true }
@@ -206,7 +225,7 @@ export function registerCatalog(system: CommandSystem): void {
         if (list instanceof HTMLElement && list.scrollTop > 0) scrollTop = list.scrollTop
       }
       ctx.store.rememberCollection({
-        pathname: collectionPath(ctx.view),
+        pathname: collectionPath(ctx.view, ctx.store.routeScope()),
         search: ctx.search,
         scrollTop,
         highlightId: issue.id,
@@ -214,7 +233,7 @@ export function registerCatalog(system: CommandSystem): void {
       })
       ctx.store.openIssuePeek(id)
       if (ctx.view !== 'projects' && ctx.view !== 'cycles' && ctx.view !== 'initiatives') {
-        ctx.navigate?.(issuePeekPath(ctx.view, issue.identifier))
+        ctx.navigate?.(issuePeekPath(ctx.view, issue.identifier, ctx.store.routeScope()))
       }
       return { ok: true }
     },
@@ -769,7 +788,7 @@ export function registerCatalog(system: CommandSystem): void {
     run: (ctx) => {
       if (ctx.view === 'board') {
         ctx.store.setLayout('list')
-        ctx.navigate?.('/eng/all')
+        ctx.navigate?.(collectionPath('all', ctx.store.routeScope()))
         return { ok: true }
       }
       ctx.store.toggleLayout(ctx.view)
@@ -819,7 +838,7 @@ export function registerCatalog(system: CommandSystem): void {
     keywords: ['triage'],
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/inbox')
+      ctx.navigate?.(collectionPath('inbox', ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -829,7 +848,7 @@ export function registerCatalog(system: CommandSystem): void {
     label: 'Go to My issues',
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/my-issues')
+      ctx.navigate?.(collectionPath('my-issues', ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -839,7 +858,17 @@ export function registerCatalog(system: CommandSystem): void {
     label: 'Go to All issues',
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/eng/all')
+      ctx.navigate?.(collectionPath('all', ctx.store.routeScope()))
+      return { ok: true }
+    },
+  })
+
+  registry.register({
+    id: 'nav.board',
+    label: 'Go to Board',
+    when: () => true,
+    run: (ctx) => {
+      ctx.navigate?.(collectionPath('board', ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -849,7 +878,7 @@ export function registerCatalog(system: CommandSystem): void {
     label: 'Go to Projects',
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/projects')
+      ctx.navigate?.(collectionPath('projects', ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -859,7 +888,7 @@ export function registerCatalog(system: CommandSystem): void {
     label: 'Go to Cycles',
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/cycles')
+      ctx.navigate?.(collectionPath('cycles', ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -869,7 +898,7 @@ export function registerCatalog(system: CommandSystem): void {
     label: 'Go to current cycle',
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/cycles/current')
+      ctx.navigate?.(cyclesCurrentPath(ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -879,7 +908,7 @@ export function registerCatalog(system: CommandSystem): void {
     label: 'Go to Initiatives',
     when: () => true,
     run: (ctx) => {
-      ctx.navigate?.('/initiatives')
+      ctx.navigate?.(collectionPath('initiatives', ctx.store.routeScope()))
       return { ok: true }
     },
   })
@@ -895,6 +924,7 @@ export function registerCatalog(system: CommandSystem): void {
   })
 
   system.shortcuts.bind({ key: 'k', mod: true, whenTyping: 'always' }, 'command.palette')
+  system.shortcuts.bind({ key: '/', whenTyping: 'never' }, 'workspace.search')
   system.shortcuts.bind({ key: 'Escape', whenTyping: 'always' }, 'surface.dismiss')
   system.shortcuts.bind({ key: 'z', mod: true }, 'edit.undo')
   system.shortcuts.bind({ key: 'c' }, 'issue.create')

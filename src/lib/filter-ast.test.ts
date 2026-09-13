@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   astFromFilters,
+  combineFilterRoot,
   filtersFromAst,
   matchFilterAst,
 } from './filter-ast'
@@ -72,5 +73,17 @@ describe('filter AST', () => {
         ast,
       ),
     ).toBe(false)
+  })
+
+  it('switches a clause group between AND and OR', () => {
+    const andAst = astFromFilters({
+      ...EMPTY_FILTERS,
+      assigneeId: IDS.userMe,
+      priority: 1,
+    })
+    expect(andAst.type).toBe('and')
+    const orAst = combineFilterRoot(andAst, 'or')
+    expect(orAst.type).toBe('or')
+    expect(filtersFromAst(orAst)).toEqual(filtersFromAst(andAst))
   })
 })

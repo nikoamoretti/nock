@@ -30,14 +30,14 @@ export function Composer() {
         ? document.querySelector('[data-testid=issue-list]')
         : null
     store.rememberCollection({
-      pathname: collectionPath(view),
+      pathname: collectionPath(view, store.routeScope()),
       search: location.search,
       scrollTop:
         list instanceof HTMLElement ? list.scrollTop : store.ui.listScrollTop,
       highlightId: created.id,
       selectedIds: [created.id],
     })
-    navigate(issuePeekPath(view, created.identifier))
+    navigate(issuePeekPath(view, created.identifier, store.routeScope()))
   }
 
   if (!store.ui.composerOpen) return null
