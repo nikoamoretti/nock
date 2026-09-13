@@ -15,6 +15,7 @@ import type {
 export const IDS = {
   workspace: 'ws_acme',
   teamEng: 'team_eng',
+  teamDes: 'team_des',
   userMe: 'user_me',
   userMaya: 'user_maya',
   userJules: 'user_jules',
@@ -26,6 +27,9 @@ export const IDS = {
   stateDone: 'state_done',
   stateCanceled: 'state_canceled',
   stateDuplicate: 'state_duplicate',
+  stateDesTodo: 'state_des_todo',
+  stateDesProgress: 'state_des_progress',
+  stateDesDone: 'state_des_done',
   labelBug: 'label_bug',
   labelFeature: 'label_feature',
   labelImprove: 'label_improve',
@@ -34,6 +38,7 @@ export const IDS = {
   cycleCurrent: 'cycle_current',
   cyclePrevious: 'cycle_previous',
   cycleNext: 'cycle_next',
+  cycleDesCurrent: 'cycle_des_current',
   milestoneLaunch: 'ms_launch',
   initiativePlatform: 'init_platform',
   docSync: 'doc_sync',
@@ -58,6 +63,13 @@ export function createBootstrapSnapshot(options?: {
       id: IDS.teamEng,
       key: 'ENG',
       name: 'Engineering',
+      issueCounter: 0,
+      cycleDurationWeeks: 2,
+    },
+    {
+      id: IDS.teamDes,
+      key: 'DES',
+      name: 'Design',
       issueCounter: 0,
       cycleDurationWeeks: 2,
     },
@@ -153,6 +165,33 @@ export function createBootstrapSnapshot(options?: {
       type: 'duplicate',
       color: '#95a2b3',
       position: 7,
+      isDefault: false,
+    },
+    {
+      id: IDS.stateDesTodo,
+      teamId: IDS.teamDes,
+      name: 'Ready',
+      type: 'unstarted',
+      color: '#e2e2e2',
+      position: 0,
+      isDefault: true,
+    },
+    {
+      id: IDS.stateDesProgress,
+      teamId: IDS.teamDes,
+      name: 'Designing',
+      type: 'started',
+      color: '#f2c94c',
+      position: 1,
+      isDefault: false,
+    },
+    {
+      id: IDS.stateDesDone,
+      teamId: IDS.teamDes,
+      name: 'Shipped',
+      type: 'completed',
+      color: '#4cb782',
+      position: 2,
       isDefault: false,
     },
   ]
@@ -253,6 +292,18 @@ export function createBootstrapSnapshot(options?: {
       updatedAt: now,
       syncId: 4,
     },
+    {
+      id: IDS.cycleDesCurrent,
+      teamId: IDS.teamDes,
+      number: 4,
+      startsAt: at(-3, now),
+      endsAt: at(11, now),
+      completedAt: null,
+      scopeIssueIds: [],
+      createdAt: at(-3, now),
+      updatedAt: now,
+      syncId: 5,
+    },
   ]
 
   const snapshot: Snapshot = {
@@ -338,7 +389,9 @@ export function createBootstrapSnapshot(options?: {
 
   if (options?.demo) {
     snapshot.issues = demoIssues(now)
-    snapshot.teams[0].issueCounter = snapshot.issues.length
+    for (const team of snapshot.teams) {
+      team.issueCounter = snapshot.issues.filter((issue) => issue.teamId === team.id).length
+    }
     snapshot.lastSyncId = 3 + snapshot.issues.length
   }
 
@@ -462,7 +515,7 @@ function demoIssues(now: number): Issue[] {
     },
   ]
 
-  return rows.map((row, index) => {
+  const eng = rows.map((row, index) => {
     const number = index + 1
     return normalizeIssue({
       id: `issue_${number}`,
@@ -492,4 +545,34 @@ function demoIssues(now: number): Issue[] {
       archivedAt: null,
     })
   })
+  return [
+    ...eng,
+    normalizeIssue({
+      id: 'issue_des_brand',
+      teamId: IDS.teamDes,
+      number: 1,
+      identifier: 'DES-1',
+      title: 'Brand system for search empty state',
+      description: 'Design-owned issue used to verify team-scoped routes.',
+      priority: 2,
+      stateId: IDS.stateDesTodo,
+      assigneeId: IDS.userMaya,
+      projectId: null,
+      cycleId: IDS.cycleDesCurrent,
+      labelIds: [],
+      parentId: null,
+      sortOrder: 1,
+      createdAt: now - 3600000,
+      updatedAt: now,
+      syncId: 3 + eng.length + 1,
+      revision: 3 + eng.length + 1,
+      lastMutationId: null,
+      milestoneId: null,
+      subscriberIds: [],
+      relatedIssueIds: [],
+      blockedByIds: [],
+      duplicateOfId: null,
+      archivedAt: null,
+    }),
+  ]
 }

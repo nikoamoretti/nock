@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
+import { useEscape, useFocusTrap, useRestoreFocus } from '../ui/overlay'
 
 export function OverlayShell({
   label,
@@ -9,12 +10,18 @@ export function OverlayShell({
   children: ReactNode
   onDismiss: () => void
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useRestoreFocus(true)
+  useFocusTrap(dialogRef, true)
+  useEscape(true, onDismiss)
+
   return (
     <div
       className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 pt-[16vh]"
       onMouseDown={() => onDismiss()}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={label}

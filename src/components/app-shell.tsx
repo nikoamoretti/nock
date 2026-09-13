@@ -1,10 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
+import { parseAppPath } from '../lib/paths'
 import { viewFromPath } from '../lib/view-from-path'
 import { searchFromAst } from '../lib/url-filters'
 import { CommandPalette } from './command-palette'
 import { Composer } from './composer'
+import { ScopeUnavailable } from './document-page'
 import { HelpOverlay } from './help-overlay'
 import { PersistBanner } from './persist-banner'
 import { PropertyMenu } from './property-menu'
@@ -16,6 +18,22 @@ export function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const view = viewFromPath(location.pathname)
+  const parsed = parseAppPath(location.pathname)
+  const workspaceMismatch = Boolean(
+    parsed && parsed.workspaceKey !== store.workspace.urlKey,
+  )
+  const unknownTeam = Boolean(
+    parsed?.teamKey && !store.teamByKey(parsed.teamKey),
+  )
+
+  useLayoutEffect(() => {
+    if (workspaceMismatch || unknownTeam) return
+    const nextKey =
+      parsed?.teamKey && store.teamByKey(parsed.teamKey)
+        ? parsed.teamKey
+        : null
+    store.setRouteTeamKey(nextKey)
+  }, [parsed?.teamKey, store, unknownTeam, workspaceMismatch])
 
   useEffect(() => {
     store.commands.setHost({
@@ -27,7 +45,10 @@ export function AppShell() {
           navigate(to)
           return
         }
-        navigate({ pathname: to, search: searchFromAst(store.ui.filterAst) })
+        navigate({
+          pathname: to,
+          search: searchFromAst(store.ui.filterAst, store.ui.filterCombine),
+        })
       },
     })
   }, [store, navigate, view, location.pathname, location.search])
@@ -44,7 +65,13 @@ export function AppShell() {
       </a>
       <Sidebar />
       <main id="nock-main" aria-label="Workspace" className="flex min-w-0 flex-1">
-        <Outlet />
+        {workspaceMismatch ? (
+          <ScopeUnavailable reason="workspace" />
+        ) : unknownTeam ? (
+          <ScopeUnavailable reason="team" />
+        ) : (
+          <Outlet />
+        )}
       </main>
       <PersistBanner />
       {store.ui.composerOpen && <Composer />}

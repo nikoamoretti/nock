@@ -5,6 +5,7 @@ import {
   astFromSearch,
   decodeFilterAst,
   encodeFilterAst,
+  filterStateFromSearch,
   filtersFromSearch,
   searchFromAst,
   searchFromFilters,
@@ -76,5 +77,14 @@ describe('url filters', () => {
     const search = searchFromAst(ast)
     expect(astFromSearch(search)).toEqual(ast)
     expect(search).toContain('filter=')
+  })
+
+  it('persists an empty OR preference in the URL payload', () => {
+    const search = searchFromAst({ type: 'all' }, 'or')
+    expect(search).toContain('filter=')
+    expect(filterStateFromSearch(search)).toEqual({
+      ast: { type: 'all' },
+      combine: 'or',
+    })
   })
 })

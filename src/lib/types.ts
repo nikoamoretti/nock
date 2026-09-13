@@ -256,6 +256,7 @@ export interface SavedView {
   displayProperties: DisplayProperty[]
   filters: IssueFilters
   ast: FilterAst
+  combine: 'and' | 'or'
 }
 
 export type MutationStatus =
@@ -355,6 +356,7 @@ export interface UiState {
   displayProperties: DisplayProperty[]
   filters: IssueFilters
   filterAst: FilterAst
+  filterCombine: 'and' | 'or'
   savedViewId: string | null
   pickerQuery: string
   collectionRestore: CollectionRestore | null
@@ -369,6 +371,8 @@ export interface UiState {
   commandQuery: string
   searchOpen: boolean
   searchQuery: string
+  searchError: string | null
+  routeTeamKey: string | null
   propertyMenu: PropertyMenuKind | null
   inboxPane: 'triage' | 'priority' | 'other'
   highlightedNotificationId: string | null

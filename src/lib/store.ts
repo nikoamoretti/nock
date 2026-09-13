@@ -6,7 +6,14 @@ import {
 } from './commands'
 import { CommandSystem } from './command-system'
 import type { EntityMaps } from './entity-store'
-import { astFromFilters, combineFilterRoot, filtersFromAst } from './filter-ast'
+import {
+  astFromFilters,
+  combineFilterRoot,
+  filtersFromAst,
+  removeField,
+  setFieldValue,
+  toggleCondition,
+} from './filter-ast'
 import type { PathScope } from './paths'
 import type { SearchDocument } from './search'
 import { splitInbox, markAllRead, defaultDeliveryPreferences, type DeliveryPreferences, type InboxNotification } from './inbox'
@@ -31,7 +38,7 @@ import {
   type CustomerRequest,
   type TriageRule,
 } from './triage'
-import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch } from './filters'
+import { applyExtraFilters, boardColumns, currentCycle, filterIssues, fuzzyMatch, isTeamScopedView } from './filters'
 import { formatIdentifier } from './identifiers'
 import { cloneIssue, normalizeIssue, pickInverse } from './issue-model'
 import { MemoryPersistence, type Persistence } from './persist'
@@ -47,6 +54,8 @@ import type {
   Cycle,
   DisplayProperty,
   FilterAst,
+  FilterField,
+  FilterOp,
   GroupBy,
   Initiative,
   InversePatch,
@@ -93,6 +102,7 @@ function defaultUi(snapshot: Snapshot): UiState {
     displayProperties: [...DEFAULT_DISPLAY_PROPERTIES],
     filters: { ...EMPTY_FILTERS },
     filterAst: EMPTY_AST,
+    filterCombine: 'and',
     savedViewId: null,
     pickerQuery: '',
     collectionRestore: null,
@@ -107,6 +117,8 @@ function defaultUi(snapshot: Snapshot): UiState {
     commandQuery: '',
     searchOpen: false,
     searchQuery: '',
+    searchError: null,
+    routeTeamKey: null,
     propertyMenu: null,
     inboxPane: 'triage',
     highlightedNotificationId: null,
@@ -493,10 +505,27 @@ export class NockStore {
     return team
   }
 
+  teamByKey(key: string): Team | undefined {
+    return [...this.teams.values()].find((team) => team.key === key)
+  }
+
+  routeTeam(): Team {
+    if (this.ui.routeTeamKey) {
+      return this.teamByKey(this.ui.routeTeamKey) ?? this.defaultTeam()
+    }
+    return this.defaultTeam()
+  }
+
+  setRouteTeamKey(key: string | null): void {
+    if (this.ui.routeTeamKey === key) return
+    this.ui.routeTeamKey = key
+    this.emit()
+  }
+
   routeScope(): PathScope {
     return {
       workspaceKey: this.workspace.urlKey,
-      teamKey: this.defaultTeam().key,
+      teamKey: this.routeTeam().key,
     }
   }
 
@@ -520,6 +549,10 @@ export class NockStore {
       externalLinks: this.externalLinks,
       savedViews: this.savedViews,
     }
+  }
+
+  documentById(id: string): PlanningDocument | undefined {
+    return this.documents.get(id)
   }
 
   statesForTeam(teamId: string): WorkflowState[] {
@@ -588,10 +621,15 @@ export class NockStore {
 
   issuesForView(view: ViewId): Issue[] {
     const live = [...this.issues.values()]
+    const team = this.ui.routeTeamKey ? this.teamByKey(this.ui.routeTeamKey) : null
+    const scoped =
+      team && isTeamScopedView(view)
+        ? live.filter((issue) => issue.teamId === team.id)
+        : live
     const matched = applyExtraFilters(
       filterIssues(
         {
-          issues: live,
+          issues: scoped,
           states: [...this.states.values()],
           currentUserId: this.currentUserId,
         },
@@ -615,7 +653,7 @@ export class NockStore {
   }
 
   boardStates(): WorkflowState[] {
-    return boardColumns(this.statesForTeam(this.defaultTeam().id))
+    return boardColumns(this.statesForTeam(this.routeTeam().id))
   }
 
   private forgetIssue(id: string): void {
@@ -662,7 +700,7 @@ export class NockStore {
   createIssue(input: CreateIssueInput, origin: WriteOrigin = 'local'): Issue {
     const title = input.title.trim()
     if (!title) throw new Error('[nock] title is required')
-    const team = this.teams.get(input.teamId ?? this.defaultTeam().id)
+    const team = this.teams.get(input.teamId ?? this.routeTeam().id)
     if (!team) throw new Error('[nock] team not found')
     team.issueCounter += 1
     const number = team.issueCounter
@@ -983,6 +1021,7 @@ export class NockStore {
       displayProperties: [...this.ui.displayProperties],
       filters: { ...this.ui.filters },
       ast: structuredClone(this.ui.filterAst),
+      combine: this.ui.filterCombine,
     }
     this.savedViews.set(saved.id, saved)
     this.ui.savedViewId = saved.id
@@ -1001,6 +1040,7 @@ export class NockStore {
     this.ui.displayProperties = [...saved.displayProperties]
     this.ui.filters = { ...saved.filters }
     this.ui.filterAst = structuredClone(saved.ast)
+    this.ui.filterCombine = saved.combine ?? (saved.ast.type === 'or' ? 'or' : 'and')
     this.ui.savedViewId = saved.id
     this.emit()
   }
@@ -1121,52 +1161,77 @@ export class NockStore {
 
   setFilters(filters: IssueFilters): void {
     const next = { ...EMPTY_FILTERS, ...filters }
-    if (
-      this.ui.filters.assigneeId === next.assigneeId &&
-      this.ui.filters.stateId === next.stateId &&
-      this.ui.filters.priority === next.priority &&
-      this.ui.filters.projectId === next.projectId &&
-      this.ui.filters.cycleId === next.cycleId
-    ) {
-      return
-    }
     this.ui.filters = next
     this.ui.filterAst = astFromFilters(next)
+    this.ui.filterCombine = 'and'
     this.ui.savedViewId = null
     this.emit()
   }
 
   setFilterAst(ast: FilterAst): void {
+    this.commitFilterAst(ast)
+  }
+
+  setFilterState(ast: FilterAst, combine: 'and' | 'or'): void {
     const next = structuredClone(ast)
-    const filters = filtersFromAst(next)
     if (
       JSON.stringify(this.ui.filterAst) === JSON.stringify(next) &&
-      this.ui.filters.assigneeId === filters.assigneeId &&
-      this.ui.filters.stateId === filters.stateId &&
-      this.ui.filters.priority === filters.priority &&
-      this.ui.filters.projectId === filters.projectId &&
-      this.ui.filters.cycleId === filters.cycleId
+      this.ui.filterCombine === combine
     ) {
       return
     }
     this.ui.filterAst = next
-    this.ui.filters = filters
+    this.ui.filters = filtersFromAst(next)
+    this.ui.filterCombine = combine
+    this.emit()
+  }
+
+  setFilterCombine(combine: 'and' | 'or'): void {
+    this.ui.filterCombine = combine
+    if (this.ui.filterAst.type !== 'all') {
+      this.ui.filterAst = combineFilterRoot(this.ui.filterAst, combine)
+      this.ui.filters = filtersFromAst(this.ui.filterAst)
+    }
     this.ui.savedViewId = null
     this.emit()
   }
 
   setFilter<K extends keyof IssueFilters>(key: K, value: IssueFilters[K]): void {
-    this.ui.filters = { ...this.ui.filters, [key]: value }
-    const next = astFromFilters(this.ui.filters)
-    this.ui.filterAst =
-      this.ui.filterAst.type === 'or' ? combineFilterRoot(next, 'or') : next
-    this.ui.savedViewId = null
-    this.emit()
+    const next = setFieldValue(
+      this.ui.filterAst,
+      key as FilterField,
+      value,
+      this.ui.filterCombine,
+    )
+    this.commitFilterAst(next)
+  }
+
+  toggleFilterValue(
+    field: FilterField,
+    value: string | number | null,
+    op: FilterOp = 'eq',
+  ): void {
+    this.commitFilterAst(
+      toggleCondition(this.ui.filterAst, field, value, this.ui.filterCombine, op),
+    )
+  }
+
+  clearFilterField(field: FilterField): void {
+    this.commitFilterAst(removeField(this.ui.filterAst, field))
   }
 
   clearFilters(): void {
     this.ui.filters = { ...EMPTY_FILTERS }
     this.ui.filterAst = EMPTY_AST
+    this.ui.filterCombine = 'and'
+    this.ui.savedViewId = null
+    this.emit()
+  }
+
+  private commitFilterAst(ast: FilterAst): void {
+    const next = structuredClone(ast)
+    this.ui.filterAst = next
+    this.ui.filters = filtersFromAst(next)
     this.ui.savedViewId = null
     this.emit()
   }
@@ -1223,7 +1288,7 @@ export class NockStore {
   }
 
   openComposer(fromView?: ViewId, options?: { parentId?: string }): void {
-    const team = this.defaultTeam()
+    const team = this.routeTeam()
     let stateId = this.defaultState(team.id).id
     if (fromView === 'inbox') {
       stateId =
@@ -1325,6 +1390,7 @@ export class NockStore {
 
   openSearch(): void {
     this.ui.searchOpen = true
+    this.ui.searchError = null
     this.ui.commandOpen = false
     this.ui.composerOpen = false
     this.ui.searchQuery = ''
@@ -1342,12 +1408,19 @@ export class NockStore {
 
   closeSearch(): void {
     this.ui.searchOpen = false
+    this.ui.searchError = null
     this.dropModal('search')
+    this.emit()
+  }
+
+  setSearchError(error: string | null): void {
+    this.ui.searchError = error
     this.emit()
   }
 
   setSearchQuery(query: string): void {
     this.ui.searchQuery = query
+    this.ui.searchError = null
     this.emit()
   }
 

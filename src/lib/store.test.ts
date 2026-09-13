@@ -104,9 +104,10 @@ describe('NockStore', () => {
   it('hydrates the next issue number from existing rows', () => {
     const snapshot = createBootstrapSnapshot({ demo: true })
     const store = NockStore.from(snapshot)
+    const engCount = snapshot.issues.filter((issue) => issue.teamId === IDS.teamEng).length
     const next = store.createIssue({ title: 'After seed' })
-    expect(next.number).toBe(snapshot.issues.length + 1)
-    expect(next.identifier).toBe(`ENG-${snapshot.issues.length + 1}`)
+    expect(next.number).toBe(engCount + 1)
+    expect(next.identifier).toBe(`ENG-${engCount + 1}`)
   })
 
   it('round-trips through persistence', async () => {
@@ -423,6 +424,46 @@ describe('NockStore', () => {
     )
     expect(store.externalLinksForIssue(issue!.id).some((row) => row.url.includes('/pull/3'))).toBe(true)
     expect(store.installations.get('inst_github')?.provider).toBe('github')
+  })
+
+  it('keeps a label condition when a priority filter is added', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    const bug = store.createIssue({
+      title: 'Bug high',
+      stateId: IDS.stateTodo,
+      labelIds: [IDS.labelBug],
+      priority: 1,
+    })
+    store.createIssue({
+      title: 'Unlabeled high',
+      stateId: IDS.stateTodo,
+      priority: 1,
+    })
+    store.toggleFilterValue('labelId', IDS.labelBug)
+    store.setFilter('priority', 1)
+    expect(store.issuesForView('all').map((row) => row.id)).toEqual([bug.id])
+  })
+
+  it('scopes team views to the route team without collapsing workspace views', () => {
+    const store = NockStore.from(createBootstrapSnapshot({ demo: false }))
+    store.createIssue({ title: 'Eng work', stateId: IDS.stateTodo })
+    store.createIssue({
+      title: 'Des work',
+      teamId: IDS.teamDes,
+      stateId: IDS.stateDesTodo,
+    })
+    store.setRouteTeamKey('DES')
+    expect(store.issuesForView('all').map((row) => row.title)).toEqual(['Des work'])
+    expect(store.boardStates().some((state) => state.id === IDS.stateDesTodo)).toBe(
+      true,
+    )
+    store.setRouteTeamKey('ENG')
+    expect(store.issuesForView('all').map((row) => row.title)).toEqual(['Eng work'])
+    store.createIssue({ title: 'Triage ENG', stateId: IDS.stateTriage })
+    store.setRouteTeamKey('DES')
+    expect(
+      store.issuesForView('inbox').some((row) => row.title === 'Triage ENG'),
+    ).toBe(true)
   })
 })
 

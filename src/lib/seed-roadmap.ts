@@ -741,19 +741,60 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
   if (snapshot.initiatives[0] && snapshot.initiatives[0].projectIds.length === 0) {
     snapshot.initiatives[0].projectIds = snapshot.projects.slice(0, 3).map((project) => project.id)
   }
-  snapshot.documents = snapshot.projects.slice(0, 3).map((project, index) => ({
-    id: `doc_${project.id}`,
-    projectId: project.id,
-    initiativeId: null,
-    title: `${project.name} notes`,
-    body: project.description,
-    createdAt: now - (index + 1) * 86400000,
-    updatedAt: now,
-  }))
+  snapshot.documents = [
+    {
+      id: IDS.docSync,
+      projectId: snapshot.projects[0]?.id ?? null,
+      initiativeId: null,
+      title: 'Sync contract',
+      body: 'IndexedDB is the visible source of truth. Postgres is durability.',
+      createdAt: now - 5 * 86400000,
+      updatedAt: now,
+    },
+    ...snapshot.projects.slice(0, 3).map((project, index) => ({
+      id: `doc_${project.id}`,
+      projectId: project.id,
+      initiativeId: null,
+      title: `${project.name} notes`,
+      body: project.description,
+      createdAt: now - (index + 1) * 86400000,
+      updatedAt: now,
+    })),
+  ]
   const currentIds = issues.filter((issue) => issue.cycleId === IDS.cycleCurrent).map((issue) => issue.id)
   snapshot.cycles = snapshot.cycles.map((cycle) =>
     cycle.id === IDS.cycleCurrent ? { ...cycle, scopeIssueIds: currentIds } : cycle,
   )
+  const desTeam = snapshot.teams.find((team) => team.id === IDS.teamDes)
+  const desIssue = {
+    id: 'issue_des_brand',
+    teamId: IDS.teamDes,
+    number: 1,
+    identifier: 'DES-1',
+    title: 'Brand system for search empty state',
+    description: 'Design-owned issue used to verify team-scoped routes.',
+    priority: 2 as Priority,
+    stateId: IDS.stateDesTodo,
+    assigneeId: IDS.userMaya,
+    projectId: null,
+    cycleId: IDS.cycleDesCurrent,
+    labelIds: [],
+    parentId: null,
+    sortOrder: 1,
+    createdAt: now - 3600000,
+    updatedAt: now,
+    syncId: syncId++,
+    revision: syncId,
+    lastMutationId: null,
+    milestoneId: null,
+    subscriberIds: [IDS.userMe],
+    relatedIssueIds: [],
+    blockedByIds: [],
+    duplicateOfId: null,
+    archivedAt: null,
+  }
+  snapshot.issues = [...issues, desIssue]
+  if (desTeam) desTeam.issueCounter = 1
   snapshot.teams[0] = {
     ...snapshot.teams[0],
     name: 'Workspace',
@@ -793,11 +834,12 @@ export function createWorkspaceSnapshot(now = Date.now()): Snapshot {
       } satisfies Issue
     },
   )
-  snapshot.issues = [...issues, ...inbound]
+  snapshot.issues = [...issues, desIssue, ...inbound]
   snapshot.teams[0] = {
     ...snapshot.teams[0],
-    issueCounter: snapshot.issues.length,
+    issueCounter: issues.length + inbound.length,
   }
+  if (desTeam) desTeam.issueCounter = 1
   snapshot.notifications = (snapshot.notifications ?? []).map((row, index) => ({
     ...row,
     sourceType: row.type === 'project_update' ? 'project' : 'issue',

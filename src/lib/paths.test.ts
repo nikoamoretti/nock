@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canonicalizeLocation,
   canonicalizePath,
   collectionPath,
   cyclePath,
@@ -54,8 +55,21 @@ describe('issue paths', () => {
     expect(canonicalizePath('/', '#/eng/all', scope)).toBe(
       '/acme/team/ENG/all',
     )
-    expect(locationNeedsCanonical('/acme/team/ENG/all', '', scope)).toBeNull()
-    expect(locationNeedsCanonical('/', '#/inbox', scope)).toBe('/acme/inbox')
-    expect(canonicalizePath('/nico/inbox', '', scope)).toBe('/acme/inbox')
+    expect(locationNeedsCanonical('/acme/team/ENG/all', '', '', scope)).toBeNull()
+    expect(locationNeedsCanonical('/', '', '#/inbox', scope)).toEqual({
+      pathname: '/acme/inbox',
+      search: '',
+    })
+    expect(canonicalizePath('/nico/inbox', '', scope)).toBe('/nico/inbox')
+    expect(parseAppPath('/acme/document/doc_sync')).toMatchObject({
+      view: 'projects',
+      documentId: 'doc_sync',
+    })
+    expect(
+      canonicalizeLocation('/', '?layout=list', '#/eng/all?priority=1', scope),
+    ).toEqual({
+      pathname: '/acme/team/ENG/all',
+      search: '?priority=1&layout=list',
+    })
   })
 })

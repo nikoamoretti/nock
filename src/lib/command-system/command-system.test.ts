@@ -32,13 +32,13 @@ describe('CommandRegistry', () => {
     expect(commands.canRun('issue.setStatus')).toBe(true)
     expect(commands.canRun('issue.setPriority')).toBe(true)
     expect(commands.canRun('issue.delete')).toBe(true)
-    expect(commands.canRun('issue.moveTeam')).toBe(false)
+    expect(commands.canRun('issue.moveTeam')).toBe(true)
     expect(commands.canRun('issue.subscribe')).toBe(false)
     expect(commands.canRun('issue.unsubscribe')).toBe(true)
     expect(commands.paletteItems().map((command) => command.id)).toContain(
       'issue.delete',
     )
-    expect(commands.paletteItems().map((command) => command.id)).not.toContain(
+    expect(commands.paletteItems().map((command) => command.id)).toContain(
       'issue.moveTeam',
     )
   })
@@ -149,6 +149,26 @@ describe('CommandRegistry', () => {
     expect(nock.commands.run('issue.markDuplicate').ok).toBe(true)
     expect(nock.issue(b.id)?.duplicateOfId).toBe(a.id)
     expect(nock.issue(b.id)?.stateId).toBe(IDS.stateDuplicate)
+  })
+
+  it('opens an explicit issue id from search without a background selection', () => {
+    const nock = store()
+    const issue = nock.createIssue({ title: 'From search', stateId: IDS.stateTodo })
+    const paths: Array<string | number> = []
+    nock.commands.setHost({
+      view: 'projects',
+      navigate: (to) => {
+        paths.push(to)
+      },
+    })
+    expect(nock.commands.canRun('issue.open')).toBe(false)
+    expect(
+      nock.commands.canRun('issue.open', nock.commands.context(), { id: issue.id }),
+    ).toBe(true)
+    const result = nock.commands.run('issue.open', { id: issue.id })
+    expect(result.ok).toBe(true)
+    expect(nock.ui.highlightedIssueId).toBe(issue.id)
+    expect(paths[0]).toBe(`/acme/issue/${issue.identifier}`)
   })
 })
 

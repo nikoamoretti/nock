@@ -2,9 +2,9 @@ import { useEffect } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useNock } from '../hooks/use-nock'
 import { cn } from '../lib/cn'
-import { filtersActive } from '../lib/filters'
+import { filterAstActive } from '../lib/filter-ast'
 import type { Issue, ViewId } from '../lib/types'
-import { astFromSearch, searchFromAst } from '../lib/url-filters'
+import { filterStateFromSearch, searchFromAst } from '../lib/url-filters'
 import { BulkBar } from './bulk-bar'
 import { DisplayMenu } from './display-menu'
 import { FilterMenu } from './filter-menu'
@@ -30,14 +30,18 @@ export function IssueView({ view }: { view: ViewId }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { identifier } = useParams()
-  const storeSearch = searchFromAst(store.ui.filterAst)
+  const storeSearch = searchFromAst(store.ui.filterAst, store.ui.filterCombine)
 
   useEffect(() => {
-    store.setFilterAst(astFromSearch(location.search))
+    const next = filterStateFromSearch(location.search)
+    store.setFilterState(next.ast, next.combine)
   }, [location.search, store])
 
   useEffect(() => {
-    const current = searchFromAst(astFromSearch(location.search))
+    const current = searchFromAst(
+      filterStateFromSearch(location.search).ast,
+      filterStateFromSearch(location.search).combine,
+    )
     if (current !== storeSearch) {
       navigate(
         { pathname: location.pathname, search: storeSearch },
@@ -83,7 +87,7 @@ export function IssueView({ view }: { view: ViewId }) {
     .filter((issue): issue is Issue => Boolean(issue))
   const layout = store.effectiveLayout(view)
   const peeked = store.peekedIssue()
-  const filterOn = filtersActive(store.ui.filters)
+  const filterOn = filterAstActive(store.ui.filterAst)
 
   return (
     <div className="relative flex min-h-0 flex-1">

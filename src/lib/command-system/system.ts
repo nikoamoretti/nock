@@ -14,7 +14,9 @@ function capturingOpen(store: NockStore): boolean {
     store.ui.commandOpen ||
     store.ui.searchOpen ||
     store.ui.propertyMenu !== null ||
-    store.ui.composerOpen
+    store.ui.composerOpen ||
+    store.ui.filterMenuOpen ||
+    store.ui.displayMenuOpen
   )
 }
 
@@ -49,15 +51,15 @@ export class CommandSystem {
     })
   }
 
-  canRun(id: string, ctx = this.context()): boolean {
+  canRun(id: string, ctx = this.context(), args?: CommandArgs): boolean {
     const command = this.registry.get(id)
-    return Boolean(command?.when(ctx))
+    return Boolean(command?.when(ctx, args))
   }
 
   run(id: string, args?: CommandArgs, ctx = this.context()): CommandResult {
     const command = this.registry.get(id)
     if (!command) return { ok: false, error: `unknown command: ${id}` }
-    if (!command.when(ctx)) return { ok: false, error: 'unavailable' }
+    if (!command.when(ctx, args)) return { ok: false, error: 'unavailable' }
     try {
       return command.run(ctx, args) ?? { ok: true }
     } catch (error) {

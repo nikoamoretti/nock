@@ -33,7 +33,7 @@ export type RegisteredCommand = {
   shortcut?: ShortcutSpec
   shortcuts?: ShortcutSpec[]
   palette?: boolean
-  when: (ctx: CommandContext) => boolean
+  when: (ctx: CommandContext, args?: CommandArgs) => boolean
   run: (ctx: CommandContext, args?: CommandArgs) => CommandResult | void
 }
 

@@ -1,4 +1,4 @@
-import { astFromFilters, filtersFromAst } from './filter-ast'
+import { astFromFilters, filterAstWithinLimits, filtersFromAst } from './filter-ast'
 import {
   EMPTY_AST,
   EMPTY_FILTERS,
@@ -54,38 +54,62 @@ export function searchFromFilters(filters: IssueFilters): string {
   return encoded ? `?${encoded}` : ''
 }
 
-export function encodeFilterAst(ast: FilterAst): string {
-  if (ast.type === 'all') return ''
-  return toBase64Url(JSON.stringify({ v: FILTER_QUERY_VERSION, ast }))
+export function encodeFilterAst(
+  ast: FilterAst,
+  combine: 'and' | 'or' = 'and',
+): string {
+  if (ast.type === 'all' && combine === 'and') return ''
+  if (!filterAstWithinLimits(ast)) return ''
+  return toBase64Url(
+    JSON.stringify({ v: FILTER_QUERY_VERSION, ast, combine }),
+  )
 }
 
 export function decodeFilterAst(payload: string): FilterAst | null {
+  return decodeFilterPayload(payload)?.ast ?? null
+}
+
+export function decodeFilterPayload(
+  payload: string,
+): { ast: FilterAst; combine: 'and' | 'or' } | null {
   try {
     const parsed = JSON.parse(fromBase64Url(payload)) as {
       v?: number
       ast?: unknown
+      combine?: unknown
     }
     if (parsed.v !== FILTER_QUERY_VERSION) return null
-    if (!isFilterAst(parsed.ast)) return null
-    return parsed.ast
+    if (!isFilterAst(parsed.ast) || !filterAstWithinLimits(parsed.ast)) return null
+    const combine = parsed.combine === 'or' ? 'or' : 'and'
+    return { ast: parsed.ast, combine }
   } catch {
     return null
   }
 }
 
 export function astFromSearch(search: string): FilterAst {
+  return filterStateFromSearch(search).ast
+}
+
+export function filterStateFromSearch(search: string): {
+  ast: FilterAst
+  combine: 'and' | 'or'
+} {
   const params = paramsOf(search)
   const raw = params.get('filter')
   if (raw) {
-    const ast = decodeFilterAst(raw)
-    if (ast) return ast
+    const payload = decodeFilterPayload(raw)
+    if (payload) return payload
   }
-  return astFromFilters(filtersFromSearch(search))
+  return { ast: astFromFilters(filtersFromSearch(search)), combine: 'and' }
 }
 
-export function searchFromAst(ast: FilterAst): string {
+export function searchFromAst(
+  ast: FilterAst,
+  combine: 'and' | 'or' = 'and',
+): string {
   const params = new URLSearchParams()
-  const encoded = encodeFilterAst(ast)
+  const encoded = encodeFilterAst(ast, combine)
   if (encoded) params.set('filter', encoded)
   const legacy = searchFromFilters(filtersFromAst(ast))
   if (legacy) {

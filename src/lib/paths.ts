@@ -13,6 +13,12 @@ export type ParsedAppPath = {
   projectId: string | null
   cycleId: string | null
   initiativeId: string | null
+  documentId: string | null
+}
+
+export type CanonicalLocation = {
+  pathname: string
+  search: string
 }
 
 const LEGACY_ROOTS = new Set([
@@ -76,7 +82,11 @@ export function cyclePath(cycleId: string, scope: PathScope): string {
 }
 
 export function cyclesCurrentPath(scope: PathScope): string {
-  return `${collectionPath('cycles', scope)}/current`
+  return `/${scope.workspaceKey}/team/${scope.teamKey}/cycles/current`
+}
+
+export function documentPath(documentId: string, scope: PathScope): string {
+  return `/${scope.workspaceKey}/document/${documentId}`
 }
 
 export function identifierFromPath(pathname: string): string | null {
@@ -100,6 +110,7 @@ export function parseAppPath(pathname: string): ParsedAppPath | null {
     projectId: null as string | null,
     cycleId: null as string | null,
     initiativeId: null as string | null,
+    documentId: null as string | null,
   }
 
   if (parts[1] === 'team' && parts[2] && parts[3]) {
@@ -157,6 +168,9 @@ export function parseAppPath(pathname: string): ParsedAppPath | null {
   if (parts[1] === 'cycles') {
     return { ...empty, view: 'cycles', cycleId: parts[2] ?? null }
   }
+  if (parts[1] === 'document' && parts[2]) {
+    return { ...empty, view: 'projects', documentId: parts[2] }
+  }
   return null
 }
 
@@ -205,30 +219,75 @@ export function migrateLegacyPath(pathname: string, scope: PathScope): string {
   }
 }
 
+export function parseHashUrl(hash: string): { pathname: string; search: string } | null {
+  if (!hash.startsWith('#/')) return null
+  const raw = hash.slice(1)
+  const q = raw.indexOf('?')
+  if (q === -1) return { pathname: raw, search: '' }
+  return { pathname: raw.slice(0, q), search: raw.slice(q) }
+}
+
+/** Hash-embedded query wins on conflicting keys; outer search fills the rest. */
+export function mergeSearch(outer: string, inner: string): string {
+  const a = new URLSearchParams(outer.startsWith('?') ? outer.slice(1) : outer)
+  const b = new URLSearchParams(inner.startsWith('?') ? inner.slice(1) : inner)
+  a.forEach((value, key) => {
+    if (!b.has(key)) b.set(key, value)
+  })
+  const query = b.toString()
+  return query ? `?${query}` : ''
+}
+
+export function canonicalizeLocation(
+  pathname: string,
+  search: string,
+  hash: string,
+  scope: PathScope,
+): CanonicalLocation {
+  const hashed = parseHashUrl(hash)
+  const rawPath = hashed?.pathname || pathname || '/'
+  const merged = mergeSearch(search, hashed?.search ?? '')
+  if (isLegacyPath(rawPath) || rawPath === '/' || rawPath === '') {
+    return {
+      pathname: migrateLegacyPath(
+        rawPath === '/' || rawPath === '' ? '/projects' : rawPath,
+        scope,
+      ),
+      search: merged,
+    }
+  }
+  const parsed = parseAppPath(rawPath)
+  if (!parsed) {
+    return {
+      pathname: migrateLegacyPath('/projects', scope),
+      search: merged,
+    }
+  }
+  return { pathname: rawPath, search: merged }
+}
+
 export function canonicalizePath(
   pathname: string,
   hash: string,
   scope: PathScope,
 ): string {
-  const fromHash = hash.startsWith('#/') ? hash.slice(1).split('?')[0] : null
-  const raw = fromHash || pathname || '/'
-  if (isLegacyPath(raw) || raw === '/' || raw === '') {
-    return migrateLegacyPath(raw === '/' || raw === '' ? '/projects' : raw, scope)
-  }
-  const parsed = parseAppPath(raw)
-  if (!parsed) return migrateLegacyPath('/projects', scope)
-  if (parsed.workspaceKey === scope.workspaceKey) return raw
-  return `/${scope.workspaceKey}${raw.slice(parsed.workspaceKey.length + 1)}`
+  return canonicalizeLocation(pathname, '', hash, scope).pathname
 }
 
 export function locationNeedsCanonical(
   pathname: string,
+  search: string,
   hash: string,
   scope: PathScope,
-): string | null {
-  const next = canonicalizePath(pathname, hash, scope)
+): CanonicalLocation | null {
+  const next = canonicalizeLocation(pathname, search, hash, scope)
+  const currentSearch = search.startsWith('?') || search === '' ? search : `?${search}`
+  if (!hash.startsWith('#/') && next.pathname === pathname && next.search === currentSearch) {
+    return null
+  }
   if (hash.startsWith('#/')) return next
-  return next === pathname ? null : next
+  if (next.pathname === pathname && next.search === currentSearch) return null
+  return next
 }
 
 function teamView(segment: string | undefined): ViewId | null {

@@ -1,6 +1,6 @@
 import type { IssuePatch } from '../commands'
 import { cloneIssue, uniqueIds, withId, withoutId } from '../issue-model'
-import { collectionPath, cyclesCurrentPath, identifierFromPath, issuePeekPath, projectPath } from '../paths'
+import { collectionPath, cyclesCurrentPath, documentPath, identifierFromPath, issueFullPath, issuePeekPath, projectPath } from '../paths'
 import type { Issue, Priority, PropertyMenuKind } from '../types'
 import type { CommandSystem } from './system'
 import type { CommandArgs, CommandContext, CommandResult } from './types'
@@ -53,6 +53,34 @@ function applyPatches(
   system.undo.push(label, [{ type: 'issue.patch', patches: inverse }])
   ctx.store.ui.propertyMenu = null
   ctx.store.dropModal('property')
+  return { ok: true }
+}
+
+function openIssueRecord(
+  ctx: CommandContext,
+  issue: Issue,
+  options: { fullPage?: boolean } = {},
+): CommandResult {
+  let scrollTop = ctx.store.ui.listScrollTop
+  if (typeof document !== 'undefined' && typeof HTMLElement !== 'undefined') {
+    const list = document.querySelector('[data-testid=issue-list]')
+    if (list instanceof HTMLElement && list.scrollTop > 0) scrollTop = list.scrollTop
+  }
+  ctx.store.rememberCollection({
+    pathname: collectionPath(ctx.view, ctx.store.routeScope()),
+    search: ctx.search,
+    scrollTop,
+    highlightId: issue.id,
+    selectedIds: [...ctx.store.ui.selectedIssueIds],
+  })
+  ctx.store.openIssuePeek(issue.id)
+  const fromPlan =
+    ctx.view === 'projects' || ctx.view === 'cycles' || ctx.view === 'initiatives'
+  if (options.fullPage || fromPlan) {
+    ctx.navigate?.(issueFullPath(issue.identifier, ctx.store.routeScope()))
+  } else {
+    ctx.navigate?.(issuePeekPath(ctx.view, issue.identifier, ctx.store.routeScope()))
+  }
   return { ok: true }
 }
 
@@ -184,13 +212,29 @@ export function registerCatalog(system: CommandSystem): void {
     shortcut: { key: ' ' },
     keywords: ['peek', 'preview'],
     palette: false,
-    when: (ctx) => {
+    when: (ctx, args) => {
+      const explicit = stringArg(args, 'id')
+      if (explicit && (ctx.store.issue(explicit) || ctx.store.issueByIdentifier(explicit))) {
+        return true
+      }
       if (ctx.view === 'inbox' && ctx.store.ui.inboxPane !== 'triage') {
-        return Boolean(ctx.store.ui.highlightedNotificationId)
+        return Boolean(
+          explicit || ctx.store.ui.highlightedNotificationId,
+        )
       }
       return Boolean(ctx.highlightedId() || ctx.actionIds()[0])
     },
     run: (ctx, args) => {
+      const explicit = stringArg(args, 'id')
+      if (explicit) {
+        const issue =
+          ctx.store.issue(explicit) ?? ctx.store.issueByIdentifier(explicit)
+        if (issue) {
+          return openIssueRecord(ctx, issue, {
+            fullPage: args?.surface === 'search',
+          })
+        }
+      }
       if (ctx.view === 'inbox' && ctx.store.ui.inboxPane !== 'triage') {
         const row = ctx.store.openNotification(stringArg(args, 'id'))
         if (!row) return { ok: false, error: 'no notification' }
@@ -207,11 +251,11 @@ export function registerCatalog(system: CommandSystem): void {
         }
         return { ok: true }
       }
-      const id = stringArg(args, 'id') ?? ctx.highlightedId() ?? ctx.actionIds()[0]
+      const id = ctx.highlightedId() ?? ctx.actionIds()[0]
       if (!id) return { ok: false, error: 'no issue' }
       const issue = ctx.store.issue(id)
       if (!issue) return { ok: false, error: 'no issue' }
-      if (ctx.store.ui.peekOpen && ctx.store.ui.highlightedIssueId === id && !args?.id) {
+      if (ctx.store.ui.peekOpen && ctx.store.ui.highlightedIssueId === id) {
         if (identifierFromPath(ctx.pathname) && ctx.navigate) {
           ctx.navigate(-1)
           return { ok: true }
@@ -219,22 +263,25 @@ export function registerCatalog(system: CommandSystem): void {
         ctx.store.togglePeek()
         return { ok: true }
       }
-      let scrollTop = ctx.store.ui.listScrollTop
-      if (typeof document !== 'undefined' && typeof HTMLElement !== 'undefined') {
-        const list = document.querySelector('[data-testid=issue-list]')
-        if (list instanceof HTMLElement && list.scrollTop > 0) scrollTop = list.scrollTop
-      }
-      ctx.store.rememberCollection({
-        pathname: collectionPath(ctx.view, ctx.store.routeScope()),
-        search: ctx.search,
-        scrollTop,
-        highlightId: issue.id,
-        selectedIds: [...ctx.store.ui.selectedIssueIds],
-      })
-      ctx.store.openIssuePeek(id)
-      if (ctx.view !== 'projects' && ctx.view !== 'cycles' && ctx.view !== 'initiatives') {
-        ctx.navigate?.(issuePeekPath(ctx.view, issue.identifier, ctx.store.routeScope()))
-      }
+      return openIssueRecord(ctx, issue)
+    },
+  })
+
+  registry.register({
+    id: 'document.open',
+    label: 'Open document',
+    keywords: ['doc', 'notes'],
+    palette: false,
+    when: (ctx, args) => {
+      const id = stringArg(args, 'id')
+      return Boolean(id && ctx.store.documentById(id))
+    },
+    run: (ctx, args) => {
+      const id = stringArg(args, 'id')
+      if (!id) return { ok: false, error: 'Document not found' }
+      const doc = ctx.store.documentById(id)
+      if (!doc) return { ok: false, error: 'Document not found' }
+      ctx.navigate?.(documentPath(doc.id, ctx.store.routeScope()))
       return { ok: true }
     },
   })

@@ -8,6 +8,7 @@ import {
   useLocation,
 } from 'react-router-dom'
 import { AppShell } from './components/app-shell'
+import { DocumentPage } from './components/document-page'
 import { IssueDetailPage } from './components/issue-detail'
 import { IssueView } from './components/issue-view'
 import {
@@ -93,13 +94,14 @@ function LocationCanonicalizer() {
   const location = useLocation()
   const next = locationNeedsCanonical(
     location.pathname,
+    location.search,
     location.hash,
     store.routeScope(),
   )
   if (!next) return null
   return (
     <Navigate
-      to={{ pathname: next, search: location.search, hash: '' }}
+      to={{ pathname: next.pathname, search: next.search, hash: '' }}
       replace
     />
   )
@@ -117,13 +119,23 @@ function HomeRedirect() {
 function LegacyCatchAll() {
   const store = useNock()
   const location = useLocation()
-  const next =
-    locationNeedsCanonical(
-      location.pathname,
-      location.hash,
-      store.routeScope(),
-    ) ?? collectionPath('projects', store.routeScope())
-  return <Navigate to={`${next}${location.search}`} replace />
+  const next = locationNeedsCanonical(
+    location.pathname,
+    location.search,
+    location.hash,
+    store.routeScope(),
+  )
+  if (next) {
+    return (
+      <Navigate
+        to={{ pathname: next.pathname, search: next.search, hash: '' }}
+        replace
+      />
+    )
+  }
+  return (
+    <Navigate to={collectionPath('projects', store.routeScope())} replace />
+  )
 }
 
 function NockTestHook({ store }: { store: NockStore }) {
@@ -203,6 +215,10 @@ export default function App() {
               element={<CycleDetail />}
             />
             <Route path="/:workspaceKey/issue/:identifier" element={<IssueDetailPage />} />
+            <Route
+              path="/:workspaceKey/document/:documentId"
+              element={<DocumentPage />}
+            />
             <Route path="/:workspaceKey/projects" element={<ProjectsView />} />
             <Route
               path="/:workspaceKey/project/:projectId"

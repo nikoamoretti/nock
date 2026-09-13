@@ -57,16 +57,6 @@ test.describe('core issue experience', () => {
     await card.dragTo(page.getByTestId(`board-column-${IDS.stateProgress}`), {
       force: true,
     })
-    if ((await issueState(page, identifier)) !== IDS.stateProgress) {
-      await page.evaluate(
-        ({ id, stateId }) => {
-          const store = window.__NOCK__
-          const issue = store?.issueByIdentifier(id)
-          if (store && issue) store.dropIssuesOnColumn(stateId, [issue.id], 0)
-        },
-        { id: identifier, stateId: IDS.stateProgress },
-      )
-    }
     await expect.poll(() => issueState(page, identifier)).toBe(IDS.stateProgress)
   })
 

@@ -6,6 +6,7 @@ export function useEscape(active: boolean, onEscape: () => void): void {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        event.stopPropagation()
         event.stopImmediatePropagation()
         onEscape()
       }

@@ -109,7 +109,16 @@ function BoardColumn({
       onDrop={(event) => {
         if (!state) return
         event.preventDefault()
-        drop()
+        const transferred = event.dataTransfer.getData('text/plain')
+        const ids =
+          store.ui.drag?.issueIds && store.ui.drag.issueIds.length > 0
+            ? store.ui.drag.issueIds
+            : transferred
+              ? [transferred]
+              : []
+        if (ids.length === 0) return
+        const index = store.ui.drag?.overIndex ?? indexFromPoint(event.clientY)
+        store.dropIssuesOnColumn(state.id, ids, index)
       }}
       onPointerUp={() => {
         if (!store.ui.drag || !state) return
@@ -205,13 +214,19 @@ function BoardCard({ issue, columnStateId }: { issue: Issue; columnStateId?: str
       data-testid={`board-card-${issue.identifier}`}
       onPointerDown={(event) => {
         origin.current = { x: event.clientX, y: event.clientY }
-      }}
-      onPointerMove={(event) => {
-        if (!origin.current || store.ui.drag) return
-        const dx = event.clientX - origin.current.x
-        const dy = event.clientY - origin.current.y
-        if (Math.hypot(dx, dy) < 4) return
-        beginDrag()
+        const onMove = (move: PointerEvent) => {
+          if (!origin.current || store.ui.drag) return
+          const dx = move.clientX - origin.current.x
+          const dy = move.clientY - origin.current.y
+          if (Math.hypot(dx, dy) < 4) return
+          beginDrag()
+        }
+        const onUp = () => {
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', onUp)
+        }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
       }}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move'

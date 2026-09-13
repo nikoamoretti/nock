@@ -1,6 +1,7 @@
 import { eventMatchesShortcut, isTypingTarget } from './platform'
 import type { CommandSystem } from './system'
 import type { CommandArgs, CommandContext, ShortcutSpec } from './types'
+import type { NockStore } from '../store'
 
 export type ShortcutBinding = {
   spec: ShortcutSpec
@@ -39,8 +40,9 @@ export class ShortcutManager {
     if (event.defaultPrevented) return false
 
     const typing = isTypingTarget(event.target)
+    const capturing = capturingOpen(this.system.store)
 
-    if (this.go && !typing) {
+    if (this.go && !typing && !capturing) {
       this.go = false
       window.clearTimeout(this.goTimer)
       const commandId = GO_COMMANDS[event.key.toLowerCase()]
@@ -52,7 +54,7 @@ export class ShortcutManager {
       }
     }
 
-    if (!typing && event.key.toLowerCase() === 'g' && !eventHasModSafe(event) && !event.shiftKey) {
+    if (!typing && !capturing && event.key.toLowerCase() === 'g' && !eventHasModSafe(event) && !event.shiftKey) {
       this.go = true
       window.clearTimeout(this.goTimer)
       this.goTimer = window.setTimeout(() => {
@@ -64,8 +66,8 @@ export class ShortcutManager {
     for (const binding of this.bindings) {
       if (!eventMatchesShortcut(event, binding.spec)) continue
       const allowTyping = binding.spec.whenTyping === 'always'
-      if (typing && !allowTyping) continue
-      if (!this.system.canRun(binding.commandId, ctx)) continue
+      if ((typing || capturing) && !allowTyping) continue
+      if (!this.system.canRun(binding.commandId, ctx, binding.args)) continue
       event.preventDefault()
       event.stopImmediatePropagation()
       const args = binding.argsFrom?.(event) ?? binding.args
@@ -83,4 +85,16 @@ export class ShortcutManager {
 
 function eventHasModSafe(event: KeyboardEvent): boolean {
   return event.metaKey || event.ctrlKey
+}
+
+function capturingOpen(store: NockStore): boolean {
+  return (
+    store.ui.helpOpen ||
+    store.ui.commandOpen ||
+    store.ui.searchOpen ||
+    store.ui.propertyMenu !== null ||
+    store.ui.composerOpen ||
+    store.ui.filterMenuOpen ||
+    store.ui.displayMenuOpen
+  )
 }

@@ -322,7 +322,7 @@ export async function seedPrivateTeam(
     `INSERT INTO teams (
        id, workspace_id, key, name, issue_counter, private, cycle_duration_weeks,
        created_at, updated_at
-     ) VALUES ($1,$2,'DES','Design',0,true,2,$3,$3)
+     ) VALUES ($1,$2,'PRIV','Private',0,true,2,$3,$3)
      ON CONFLICT (id) DO NOTHING`,
     [teamId, workspaceId, now],
   )

@@ -103,7 +103,7 @@ function SideLink({
   const store = useNock()
   return (
     <NavLink
-      to={`${to}${searchFromAst(store.ui.filterAst)}`}
+      to={`${to}${searchFromAst(store.ui.filterAst, store.ui.filterCombine)}`}
       className={({ isActive }) =>
         cn(
           'flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] text-mute hover:bg-hover hover:text-ink',

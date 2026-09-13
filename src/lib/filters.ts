@@ -13,13 +13,17 @@ import {
   type ViewId,
   type WorkflowState,
 } from './types'
-import { matchFilterAst } from './filter-ast'
+import { filterAstActive, matchFilterAst } from './filter-ast'
 
 export function stateById(
   states: WorkflowState[],
   id: string,
 ): WorkflowState | undefined {
   return states.find((state) => state.id === id)
+}
+
+export function isTeamScopedView(view: ViewId): boolean {
+  return view === 'all' || view === 'active' || view === 'backlog' || view === 'board'
 }
 
 export function isOpenType(type: StateType): boolean {
@@ -155,7 +159,7 @@ export function applyExtraFilters(
   filters: IssueFilters,
   ast?: FilterAst,
 ): Issue[] {
-  if (ast && ast.type !== 'all') {
+  if (ast) {
     return issues.filter((issue) => matchFilterAst(issue, ast))
   }
   return issues.filter((issue) => {
@@ -173,7 +177,11 @@ export function applyExtraFilters(
   })
 }
 
-export function filtersActive(filters: IssueFilters): boolean {
+export function filtersActive(
+  filters: IssueFilters,
+  ast?: FilterAst,
+): boolean {
+  if (ast) return filterAstActive(ast)
   return (
     filters.assigneeId !== null ||
     filters.stateId !== null ||
